@@ -40,12 +40,24 @@ async def agent_explainer(state: AuditState) -> AuditState:
     rf = RandomForestClassifier(n_estimators=50, random_state=42)
     rf.fit(X_encoded, y_encoded)
 
-    # SHAP feature impact calculation
-    explainer = shap.TreeExplainer(rf)
-    shap_values = explainer.shap_values(X_encoded)
-    
+    # --- SECTION: Foolproof Feature Importance ---
+    try:
+        explainer = shap.TreeExplainer(rf)
+        shap_values = explainer.shap_values(X_encoded)
+        
+        # Handle SHAP version differences (list vs 3D array vs 2D array)
+        if isinstance(shap_values, list):
+            importances = abs(shap_values[-1]).mean(axis=0)
+        elif len(shap_values.shape) == 3:
+            importances = abs(shap_values[:, :, -1]).mean(axis=0)
+        else:
+            importances = abs(shap_values).mean(axis=0)
+    except Exception:
+        # Failsafe: Use native RF importances if SHAP array shapes break
+        importances = rf.feature_importances_
+
     # Extract the top 3 most influential features
-    feature_importance = pd.DataFrame({'feature': X.columns, 'importance': abs(shap_values[0]).mean(axis=0)}).sort_values(by='importance', ascending=False)
+    feature_importance = pd.DataFrame({'feature': X.columns, 'importance': importances}).sort_values(by='importance', ascending=False)
     top_features = feature_importance['feature'].head(3).tolist()
 
     # Pass the math to Gemini to generate the human-readable counterfactual

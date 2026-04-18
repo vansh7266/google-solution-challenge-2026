@@ -2,6 +2,9 @@
 import os
 import asyncio
 import json
+from dotenv import load_dotenv
+
+load_dotenv()
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,6 +21,7 @@ from agents.detector import agent_bias_detector
 from agents.explainer import agent_explainer
 from agents.remediator import agent_remediator
 from agents.reporter import agent_reporter
+
 
 # --- SECTION: App Initialization ---
 app = FastAPI(title="Equitas AI - Bias Detection Engine")
