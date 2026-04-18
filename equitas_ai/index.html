@@ -138,12 +138,12 @@
                 <div class="glass-panel p-6 border-l-4 border-amber-500">
                     <h3 class="text-sm text-gray-400 uppercase tracking-widest mb-1">Initial Bias Score (DIR)</h3>
                     <div class="text-5xl text-white serif-display mb-2">0.64</div>
-                    <div class="text-amber-500 text-sm">Critical Bias Detected (< 0.8)</div>
+                    <div class="text-amber-500 text-sm">Critical Bias Detected (&lt; 0.8)</div>
                     </div>
                     <div class="glass-panel p-6 border-l-4 border-[#00C896]">
                         <h3 class="text-sm text-gray-400 uppercase tracking-widest mb-1">Post-Remediation Score</h3>
                         <div class="text-5xl text-white serif-display mb-2">0.92</div>
-                        <div class="text-[#00C896] text-sm">Fairness Standard Met (> 0.8)</div>
+                        <div class="text-[#00C896] text-sm">Fairness Standard Met (&gt; 0.8)</div>
                     </div>
                 </div>
 
@@ -168,13 +168,13 @@
                     <button onclick="ROUTER.navigate('upload')"
                         class="px-6 py-3 rounded text-gray-400 hover:text-white transition-colors">Start New
                         Audit</button>
-                    <button onclick="alert('PDF Generation triggered! (This points to your FastAPI /reports endpoint)')"
+                    <button onclick="window.open('http://127.0.0.1:8000/download-report', '_blank')"
                         class="px-6 py-3 rounded bg-white text-black font-bold hover:bg-gray-200 transition-colors flex items-center gap-2">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
-                        </svg>
-                        Download Audit PDF
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                    </svg>
+                    Download Audit PDF
                     </button>
                 </div>
             </div>

@@ -3,6 +3,7 @@ import os
 import asyncio
 import json
 from dotenv import load_dotenv
+from fastapi.responses import StreamingResponse, FileResponse
 
 load_dotenv()
 from fastapi import FastAPI, UploadFile, File
@@ -126,3 +127,17 @@ async def execute_audit_stream(filepath: str) -> AsyncGenerator[str, None]:
 async def audit_stream(filepath: str):
     """The endpoint the frontend connects to for live updates."""
     return StreamingResponse(execute_audit_stream(filepath), media_type="text/event-stream")
+
+
+# --- SECTION: File Download ---
+@app.get("/download-report")
+async def download_report():
+    """Serves the generated PDF report to the frontend."""
+    report_path = Path("reports/audit_report.pdf")
+    if report_path.exists():
+        return FileResponse(
+            path=report_path, 
+            filename="Equitas_AI_Audit_Report.pdf",
+            media_type="application/pdf"
+        )
+    return {"error": "Report not found. Please run an audit first."}
