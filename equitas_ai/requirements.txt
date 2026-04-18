@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+python-multipart
+pandas
+scikit-learn
+shap
+google-generativeai
+langgraph
+reportlab
+python-dotenv
