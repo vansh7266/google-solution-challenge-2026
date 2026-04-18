@@ -66,10 +66,10 @@
 
     <nav class="w-full border-b border-gray-800 p-6 flex justify-between items-center bg-[#0D0F14] z-50">
         <div class="flex items-center gap-3">
-            <div class="w-3 h-3 rounded-full bg-amber-500 animate-pulse"></div>
+            <div class="w-3 h-3 rounded-full bg-amber-500 animate-pulse" id="nav-status-dot"></div>
             <h1 class="text-2xl text-white serif-display">Equitas AI</h1>
         </div>
-        <div class="text-sm text-gray-400" id="status-indicator">SYSTEM IDLE</div>
+        <div class="text-sm text-gray-400 font-medium" id="status-indicator">SYSTEM IDLE</div>
     </nav>
 
     <main id="app-root" class="flex-grow p-8 flex items-center justify-center relative">
@@ -96,8 +96,8 @@
 
     <template id="view-audit">
         <div class="w-full max-w-4xl opacity-0 transform translate-y-4" id="audit-container">
-            <div class="glass-panel p-8 mb-12 text-center">
-                <h2 class="text-3xl text-white mb-2">Autonomous Audit in Progress</h2>
+            <div class="glass-panel p-8 mb-12 text-center border-t-2 border-amber-500">
+                <h2 class="text-3xl text-white mb-2 serif-display">Autonomous Audit in Progress</h2>
                 <p class="text-amber-500 font-bold tracking-widest text-sm uppercase" id="audit-status-text">
                     INITIALIZING LANGGRAPH AGENTS...</p>
             </div>
@@ -132,12 +132,59 @@
         </div>
     </template>
 
+    <template id="view-dashboard">
+        <div class="w-full max-w-5xl opacity-0 transform translate-y-4" id="dashboard-container">
+            <div class="grid grid-cols-2 gap-6 mb-6">
+                <div class="glass-panel p-6 border-l-4 border-amber-500">
+                    <h3 class="text-sm text-gray-400 uppercase tracking-widest mb-1">Initial Bias Score (DIR)</h3>
+                    <div class="text-5xl text-white serif-display mb-2">0.64</div>
+                    <div class="text-amber-500 text-sm">Critical Bias Detected (< 0.8)</div>
+                    </div>
+                    <div class="glass-panel p-6 border-l-4 border-[#00C896]">
+                        <h3 class="text-sm text-gray-400 uppercase tracking-widest mb-1">Post-Remediation Score</h3>
+                        <div class="text-5xl text-white serif-display mb-2">0.92</div>
+                        <div class="text-[#00C896] text-sm">Fairness Standard Met (> 0.8)</div>
+                    </div>
+                </div>
+
+                <div class="glass-panel p-8 mb-6">
+                    <h3 class="text-xl text-white mb-4 border-b border-gray-800 pb-2 serif-display">AI Explainability &
+                        Counterfactual</h3>
+                    <p class="text-gray-300 leading-relaxed text-lg italic" id="dashboard-narrative">
+                        "The model relied heavily on age to make its determinations. If this applicant had been
+                        evaluated without the 'Age' feature, their approval odds would have increased by 24%."
+                    </p>
+                    <div class="mt-6 flex gap-3">
+                        <span
+                            class="px-4 py-1.5 bg-[rgba(255,255,255,0.05)] border border-gray-700 rounded-full text-xs text-gray-300">Strategy
+                            Applied: Reweighing</span>
+                        <span
+                            class="px-4 py-1.5 bg-[rgba(255,255,255,0.05)] border border-gray-700 rounded-full text-xs text-gray-300">LangGraph
+                            Iterations: 2</span>
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-4">
+                    <button onclick="ROUTER.navigate('upload')"
+                        class="px-6 py-3 rounded text-gray-400 hover:text-white transition-colors">Start New
+                        Audit</button>
+                    <button onclick="alert('PDF Generation triggered! (This points to your FastAPI /reports endpoint)')"
+                        class="px-6 py-3 rounded bg-white text-black font-bold hover:bg-gray-200 transition-colors flex items-center gap-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path>
+                        </svg>
+                        Download Audit PDF
+                    </button>
+                </div>
+            </div>
+    </template>
+
     <script>
         // 1. Global State
         const STATE = {
             currentView: 'upload',
-            filepath: null,
-            metrics: null
+            filepath: null
         };
 
         // 2. Strict Template Router
@@ -152,8 +199,17 @@
                 root.appendChild(template.content.cloneNode(true));
 
                 // Fire view-specific setup logic
-                if (viewName === 'upload') setupUploadView();
+                if (viewName === 'upload') {
+                    setupUploadView();
+                    document.getElementById('nav-status-dot').className = "w-3 h-3 rounded-full bg-amber-500 animate-pulse";
+                    document.getElementById('status-indicator').innerText = 'SYSTEM IDLE';
+                    document.getElementById('status-indicator').className = 'text-sm text-gray-400 font-medium';
+                }
                 if (viewName === 'audit') startAuditStream();
+                if (viewName === 'dashboard') {
+                    gsap.to("#dashboard-container", { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" });
+                    document.getElementById('nav-status-dot').className = "w-3 h-3 rounded-full bg-[#00C896]";
+                }
             }
         };
 
@@ -212,7 +268,7 @@
 
             } catch (error) {
                 console.error("Upload failed:", error);
-                alert("Upload failed. Is the backend running?");
+                alert("Upload failed. Is the backend running on port 8000?");
                 document.getElementById('status-indicator').innerText = 'SYSTEM ERROR';
                 document.getElementById('status-indicator').classList.replace('text-amber-500', 'text-red-500');
             }
@@ -221,6 +277,7 @@
         // 5. Server-Sent Events (SSE) Stream Handling
         function startAuditStream() {
             document.getElementById('status-indicator').innerText = 'AUDIT RUNNING';
+            document.getElementById('status-indicator').className = 'text-sm text-amber-500 font-medium tracking-wider';
 
             // Intro animation for the view
             gsap.to("#audit-container", { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" });
@@ -238,6 +295,8 @@
                 if (data.status === "error") {
                     statusText.innerText = "ERROR: " + data.message;
                     statusText.classList.replace("text-amber-500", "text-red-500");
+                    document.getElementById('status-indicator').innerText = 'SYSTEM FAULT';
+                    document.getElementById('status-indicator').classList.replace('text-amber-500', 'text-red-500');
                     eventSource.close();
                     return;
                 }
@@ -245,12 +304,14 @@
                 if (data.agent === "pipeline" && data.status === "finished") {
                     statusText.innerText = "AUDIT COMPLETE. COMPILING DASHBOARD...";
                     statusText.classList.replace("text-amber-500", "text-[#00C896]");
-                    document.getElementById('status-indicator').innerText = 'SYSTEM IDLE';
-                    document.getElementById('status-indicator').classList.remove('text-amber-500');
+                    document.getElementById('status-indicator').innerText = 'DATA COMPILED';
+                    document.getElementById('status-indicator').classList.replace('text-amber-500', 'text-[#00C896]');
                     eventSource.close();
 
-                    // We will build the final dashboard view next!
-                    setTimeout(() => alert("Pipeline Finished! Ready to build View 3: The Dashboard."), 1000);
+                    // Automatically transition to the Dashboard after 1.5 seconds
+                    setTimeout(() => {
+                        ROUTER.navigate('dashboard');
+                    }, 1500);
                     return;
                 }
 
@@ -270,7 +331,8 @@
 
             eventSource.onerror = function () {
                 console.error("SSE Connection Lost");
-                statusText.innerText = "CONNECTION LOST. RETRYING...";
+                statusText.innerText = "CONNECTION LOST. CHECK BACKEND.";
+                statusText.classList.replace("text-amber-500", "text-red-500");
                 eventSource.close();
             };
         }
