@@ -9,7 +9,7 @@ from .state import AuditState
 # --- SECTION: Agent Initialization ---
 # Ensure your GEMINI_API_KEY is in your .env file
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-flash-lite-latest')
 
 # --- SECTION: Agent Logic ---
 async def agent_profiler(state: AuditState) -> AuditState:

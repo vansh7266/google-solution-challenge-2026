@@ -26,7 +26,7 @@ def get_similar_past_audits(domain: str, bias_score: float) -> list[dict]:
     return similar[:3] 
 
 # --- SECTION: Agent Logic ---
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-flash-lite-latest')
 
 async def agent_remediator(state: AuditState) -> AuditState:
     if state.get("demo_mode", False):

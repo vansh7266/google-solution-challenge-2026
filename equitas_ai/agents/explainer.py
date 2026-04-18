@@ -9,7 +9,7 @@ import asyncio
 from .state import AuditState
 
 # --- SECTION: Agent Initialization ---
-model = genai.GenerativeModel('gemini-1.5-flash')
+model = genai.GenerativeModel('gemini-flash-lite-latest')
 
 # --- SECTION: Agent Logic ---
 async def agent_explainer(state: AuditState) -> AuditState:
