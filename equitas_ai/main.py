@@ -175,3 +175,51 @@ async def download_report():
             media_type="application/pdf",
         )
     return {"error": "No report found. Run an audit first."}
+
+@app.get("/sample/{name}")
+async def load_sample(name: str):
+    samples = {
+        "compas":         "sample_data/compas.csv",
+        "adult_income":   "sample_data/adult_income.csv",
+        "german_credit":  "sample_data/german_credit.csv",
+    }
+    if name not in samples:
+        return {"error": "Unknown sample"}
+    path = Path(samples[name])
+    if not path.exists():
+        return {"error": "Sample file not found"}
+    preview = {}
+    try:
+        df = pd.read_csv(path)
+        preview = {
+            "columns": df.columns.tolist(),
+            "dtypes":  df.dtypes.astype(str).to_dict(),
+            "shape":   [int(df.shape[0]), int(df.shape[1])],
+            "head":    df.head(5).fillna("N/A").astype(str).to_dict(orient="records"),
+            "missing": {k: int(v) for k, v in df.isnull().sum().to_dict().items()},
+        }
+    except Exception as e:
+        preview = {"error": str(e)}
+    return {"filename": path.name, "status": "loaded", "path": str(path), "preview": preview}
+
+
+@app.post("/ask")
+async def ask_gemini(payload: dict):
+    question = payload.get("question", "")
+    context  = payload.get("context", {})
+    if not question:
+        return {"answer": "No question provided."}
+
+    ctx_str = json.dumps(context, cls=SafeEncoder)
+    prompt = (
+        f"You are an AI fairness auditor. Here is the completed bias audit result:\n{ctx_str}\n\n"
+        f"Answer this question from the user in 2-3 clear sentences using the audit data above:\n{question}"
+    )
+    try:
+        import google.generativeai as genai
+        m = genai.GenerativeModel("gemini-2.0-flash")
+        loop = asyncio.get_running_loop()
+        response = await loop.run_in_executor(None, m.generate_content, prompt)
+        return {"answer": response.text.strip()}
+    except Exception as e:
+        return {"answer": f"Error: {str(e)}"}
