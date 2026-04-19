@@ -1,50 +1,145 @@
-# --- SECTION: Imports ---
 import pandas as pd
+import numpy as np
 import asyncio
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import precision_score
 from .state import AuditState
 
-# --- SECTION: Agent Logic ---
+
+def _binarize(s: pd.Series) -> np.ndarray:
+    if s.dtype == object or str(s.dtype) == "category":
+        enc = LabelEncoder().fit_transform(s.astype(str))
+        return (enc == enc.max()).astype(int)
+    return (s > s.median()).astype(int)
+
+
+def _dir_score(df: pd.DataFrame, sensitive_col: str, target_col: str) -> float:
+    y = _binarize(df[target_col])
+    tmp = df.copy()
+    tmp["_y"] = y
+    rates = tmp.groupby(sensitive_col)["_y"].mean()
+    if len(rates) < 2 or rates.max() == 0:
+        return 1.0
+    return round(float(rates.min() / rates.max()), 3)
+
+
+def _model_metrics(df: pd.DataFrame, sensitive_col: str, target_col: str) -> dict:
+    sample = df.sample(n=min(2000, len(df)), random_state=42).dropna()
+    X = sample.drop(columns=[target_col])
+    y = _binarize(sample[target_col])
+    X_enc = X.apply(lambda c: LabelEncoder().fit_transform(c.astype(str)))
+    clf = LogisticRegression(max_iter=300, C=0.1, random_state=42)
+    clf.fit(X_enc, y)
+    y_pred = clf.predict(X_enc)
+    sf = sample[sensitive_col].astype(str)
+
+    from fairlearn.metrics import (
+        demographic_parity_difference,
+        equalized_odds_difference,
+        equal_opportunity_difference,
+    )
+
+    dp = round(float(abs(demographic_parity_difference(y, y_pred, sensitive_features=sf))), 3)
+    eo = round(float(abs(equal_opportunity_difference(y, y_pred, sensitive_features=sf))), 3)
+    eod = round(float(abs(equalized_odds_difference(y, y_pred, sensitive_features=sf))), 3)
+
+    groups = sf.unique()
+    pps = {
+        g: precision_score(y[sf == g], y_pred[sf == g], zero_division=0)
+        for g in groups
+        if (sf == g).sum() > 5
+    }
+    pp = round(max(pps.values()) - min(pps.values()), 3) if len(pps) >= 2 else 0.0
+
+    return {"dp": dp, "eo": eo, "eod": eod, "pp": pp}
+
+
 async def agent_bias_detector(state: AuditState) -> AuditState:
-    # Bypass heavy math in demo mode for instant 1-second results
+    is_first = state.get("iteration_count", 0) == 0
+
     if state.get("demo_mode", False):
         await asyncio.sleep(0.5)
+        demo = {
+            "Disparate Impact (DIR)": 0.64,
+            "Demographic Parity Diff": 0.21,
+            "Equal Opportunity Diff": 0.18,
+            "Equalized Odds Diff": 0.23,
+            "Predictive Parity Diff": 0.15,
+        }
+        inter = {
+            "White+Male": 0.89,
+            "White+Female": 0.76,
+            "Black+Male": 0.58,
+            "Black+Female": 0.41,
+        }
         return {
-            **state, 
-            "disparate_impact_score": 0.64, 
-            "metrics": {"Disparate Impact (DIR)": 0.64, "Equal Opportunity": 0.71}
+            **state,
+            "disparate_impact_score": 0.64,
+            "initial_disparate_impact": 0.64 if is_first else state.get("initial_disparate_impact", 0.64),
+            "metrics": demo,
+            "initial_metrics": demo if is_first else state.get("initial_metrics", demo),
+            "intersectional_matrix": inter,
         }
 
     df = pd.read_csv(state["dataset_path"])
     sensitive_cols = state.get("sensitive_cols", [])
-    
-    if not sensitive_cols:
-        return {**state, "disparate_impact_score": 1.0, "metrics": {}}
-
-    # Heuristic: Assume the last column in the dataset is the target outcome (standard for CSVs)
     target_col = df.columns[-1]
-    
-    # Evaluate the primary sensitive feature found by Agent 1
-    sensitive_col = sensitive_cols[0] 
 
-    # Calculate Disparate Impact Ratio (DIR)
-    # DIR = (Success rate of unprivileged group) / (Success rate of privileged group)
-    rates = df.groupby(sensitive_col)[target_col].mean().to_dict()
-    
-    if len(rates) >= 2:
-        max_rate = max(rates.values())
-        min_rate = min(rates.values())
-        # Prevent division by zero
-        di_score = min_rate / max_rate if max_rate > 0 else 1.0 
-    else:
-        di_score = 1.0
+    if not sensitive_cols:
+        empty = {
+            "Disparate Impact (DIR)": 1.0,
+            "Demographic Parity Diff": 0.0,
+            "Equal Opportunity Diff": 0.0,
+            "Equalized Odds Diff": 0.0,
+            "Predictive Parity Diff": 0.0,
+        }
+        return {
+            **state,
+            "disparate_impact_score": 1.0,
+            "initial_disparate_impact": 1.0,
+            "metrics": empty,
+            "initial_metrics": empty,
+            "intersectional_matrix": {},
+        }
+
+    sensitive_col = sensitive_cols[0]
+    di = _dir_score(df, sensitive_col, target_col)
+
+    try:
+        m = _model_metrics(df, sensitive_col, target_col)
+    except Exception:
+        m = {"dp": 0.0, "eo": 0.0, "eod": 0.0, "pp": 0.0}
 
     metrics = {
-        "Disparate Impact (DIR)": round(di_score, 3),
-        "Analyzed Feature": sensitive_col
+        "Disparate Impact (DIR)": di,
+        "Demographic Parity Diff": m["dp"],
+        "Equal Opportunity Diff": m["eo"],
+        "Equalized Odds Diff": m["eod"],
+        "Predictive Parity Diff": m["pp"],
     }
 
-    return {
+    inter = {}
+    if len(sensitive_cols) >= 2:
+        try:
+            col2 = sensitive_cols[1]
+            y_bin = _binarize(df[target_col])
+            tmp = df.copy()
+            tmp["_y"] = y_bin
+            mat = tmp.groupby([sensitive_col, col2])["_y"].mean()
+            inter = {f"{k[0]}+{k[1]}": round(float(v), 3) for k, v in mat.items()}
+        except Exception:
+            pass
+
+    result = {
         **state,
-        "disparate_impact_score": round(di_score, 3),
-        "metrics": metrics
+        "disparate_impact_score": di,
+        "metrics": metrics,
+        "intersectional_matrix": inter,
     }
+
+    if is_first:
+        result["initial_disparate_impact"] = di
+        result["initial_metrics"] = metrics
+
+    return result

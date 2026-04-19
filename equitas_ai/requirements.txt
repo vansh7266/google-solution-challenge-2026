@@ -1,10 +1,13 @@
 fastapi
-uvicorn
+uvicorn[standard]
 python-multipart
 pandas
+numpy
 scikit-learn
 shap
 google-generativeai
 langgraph
 reportlab
 python-dotenv
+fairlearn
+matplotlib

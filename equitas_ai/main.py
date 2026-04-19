@@ -1,22 +1,23 @@
-# --- SECTION: Imports ---
 import os
-import asyncio
 import json
+import asyncio
+import numpy as np
+import pandas as pd
+from pathlib import Path
+from typing import AsyncGenerator, Any
 from dotenv import load_dotenv
-from fastapi.responses import StreamingResponse, FileResponse
 
 load_dotenv()
-from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import StreamingResponse
+
+import google.generativeai as genai
+genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
+
+from fastapi import FastAPI, UploadFile, File, Query
+from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pathlib import Path
-from typing import AsyncGenerator
-
-# LangGraph and State
 from langgraph.graph import StateGraph, END
-from agents.state import AuditState
 
-# Agents
+from agents.state import AuditState
 from agents.profiler import agent_profiler
 from agents.detector import agent_bias_detector
 from agents.explainer import agent_explainer
@@ -24,120 +25,153 @@ from agents.remediator import agent_remediator
 from agents.reporter import agent_reporter
 
 
-# --- SECTION: App Initialization ---
-app = FastAPI(title="Equitas AI - Bias Detection Engine")
+class SafeEncoder(json.JSONEncoder):
+    def default(self, obj: Any) -> Any:
+        if isinstance(obj, np.integer): return int(obj)
+        if isinstance(obj, np.floating): return float(obj)
+        if isinstance(obj, np.ndarray): return obj.tolist()
+        if isinstance(obj, np.bool_): return bool(obj)
+        if hasattr(obj, "item"): return obj.item()
+        return str(obj)
 
+
+def sjson(data: Any) -> str:
+    return json.dumps(data, cls=SafeEncoder)
+
+
+app = FastAPI(title="Equitas AI")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-DEMO_MODE = os.getenv("DEMO_MODE", "false").lower() == "true"
+DEMO_MODE_ENV = os.getenv("DEMO_MODE", "false").lower() == "true"
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
-# --- SECTION: LangGraph Pipeline Wiring ---
-workflow = StateGraph(AuditState)
 
-# 1. Add all agents as nodes
+workflow = StateGraph(AuditState)
 workflow.add_node("profiler", agent_profiler)
 workflow.add_node("detector", agent_bias_detector)
 workflow.add_node("explainer", agent_explainer)
 workflow.add_node("remediator", agent_remediator)
 workflow.add_node("reporter", agent_reporter)
 
-# 2. Define the exact flow
 workflow.set_entry_point("profiler")
 workflow.add_edge("profiler", "detector")
 
-# 3. The Decision Gate (Autonomous Routing)
-def route_remediation(state: AuditState) -> str:
-    di_score = state.get("disparate_impact_score", 1.0)
-    iterations = state.get("iteration_count", 0)
-    
-    # If biased (score < 0.8) AND we haven't looped too many times, fix it
-    if di_score < 0.8 and iterations < 2:
+
+def route_after_detector(state: AuditState) -> str:
+    if state.get("disparate_impact_score", 1.0) < 0.8 and state.get("iteration_count", 0) < 2:
         return "remediator"
-    # Otherwise, move to explanations and reporting
     return "explainer"
 
-workflow.add_conditional_edges("detector", route_remediation)
-workflow.add_edge("remediator", "detector") # Loop back to re-measure after fixing
+
+workflow.add_conditional_edges("detector", route_after_detector)
+workflow.add_edge("remediator", "detector")
 workflow.add_edge("explainer", "reporter")
 workflow.add_edge("reporter", END)
 
-# Compile the agentic loop
 equitas_engine = workflow.compile()
 
 
-# --- SECTION: Endpoints ---
 @app.post("/upload")
 async def upload_dataset(file: UploadFile = File(...)):
-    """Saves dataset and returns the path for the audit pipeline."""
     file_path = UPLOAD_DIR / file.filename
     with open(file_path, "wb") as f:
         f.write(await file.read())
-    return {"filename": file.filename, "status": "uploaded", "path": str(file_path)}
 
-# --- SECTION: SSE Streaming Engine ---
-async def execute_audit_stream(filepath: str) -> AsyncGenerator[str, None]:
-    """Runs LangGraph and streams real-time state changes to the UI."""
-    
-    initial_state = AuditState(
-        dataset_path=filepath,
-        domain="",
-        sensitive_cols=[],
-        metrics={},
-        disparate_impact_score=1.0,
-        explanations={},
-        remediation_applied="None",
-        iteration_count=0,
-        demo_mode=DEMO_MODE
-    )
+    preview = {}
+    try:
+        df = pd.read_csv(file_path)
+        preview = {
+            "columns": df.columns.tolist(),
+            "dtypes": df.dtypes.astype(str).to_dict(),
+            "shape": [int(df.shape[0]), int(df.shape[1])],
+            "head": df.head(5).fillna("N/A").astype(str).to_dict(orient="records"),
+            "missing": {k: int(v) for k, v in df.isnull().sum().to_dict().items()},
+        }
+    except Exception as e:
+        preview = {"error": str(e)}
+
+    return {"filename": file.filename, "status": "uploaded", "path": str(file_path), "preview": preview}
+
+
+async def run_audit_stream(filepath: str, demo: bool) -> AsyncGenerator[str, None]:
+    initial: AuditState = {
+        "dataset_path": filepath,
+        "demo_mode": demo,
+        "domain": "",
+        "domain_context": "",
+        "sensitive_cols": [],
+        "metrics": {},
+        "initial_metrics": {},
+        "disparate_impact_score": 1.0,
+        "initial_disparate_impact": 1.0,
+        "intersectional_matrix": {},
+        "shap_features": [],
+        "explanations": {},
+        "remediation_applied": "None",
+        "iteration_count": 0,
+        "report_path": "",
+    }
+
+    accumulated = dict(initial)
 
     try:
-        # astream() yields outputs as each node finishes
-        async for output in equitas_engine.astream(initial_state):
+        async for output in equitas_engine.astream(initial):
             for node_name, state_update in output.items():
-                
-                # Format payload for the frontend UI ticker
+                accumulated.update(state_update)
                 payload = {
                     "agent": node_name,
                     "status": "completed",
-                    "current_score": state_update.get("disparate_impact_score"),
-                    "iterations": state_update.get("iteration_count")
+                    "current_score": accumulated.get("disparate_impact_score"),
+                    "iterations": accumulated.get("iteration_count", 0),
                 }
-                
-                # Yield as an SSE string
-                yield f"data: {json.dumps(payload)}\n\n"
-                
-        # Final payload to tell frontend to switch to the Dashboard view
-        final_payload = {"agent": "pipeline", "status": "finished"}
-        yield f"data: {json.dumps(final_payload)}\n\n"
-        
+                yield f"data: {sjson(payload)}\n\n"
+
+        final = {"agent": "pipeline", "status": "finished", "result": accumulated}
+        yield f"data: {sjson(final)}\n\n"
+
     except Exception as e:
-        error_payload = {"agent": "system", "status": "error", "message": str(e)}
-        yield f"data: {json.dumps(error_payload)}\n\n"
+        yield f"data: {sjson({'agent': 'system', 'status': 'error', 'message': str(e)})}\n\n"
 
 
 @app.get("/audit/stream")
-async def audit_stream(filepath: str):
-    """The endpoint the frontend connects to for live updates."""
-    return StreamingResponse(execute_audit_stream(filepath), media_type="text/event-stream")
+async def audit_stream(filepath: str = Query(...), demo: bool = Query(False)):
+    return StreamingResponse(
+        run_audit_stream(filepath, demo or DEMO_MODE_ENV),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
-# --- SECTION: File Download ---
+@app.get("/history")
+async def get_history():
+    history_path = Path("audit_history")
+    history_path.mkdir(exist_ok=True)
+    audits = []
+    for f in sorted(history_path.glob("audit_*.json"), reverse=True)[:20]:
+        try:
+            with open(f) as fh:
+                data = json.load(fh)
+                data["timestamp"] = f.stem.replace("audit_", "")
+                audits.append(data)
+        except Exception:
+            continue
+    return {"audits": audits}
+
+
 @app.get("/download-report")
 async def download_report():
-    """Serves the generated PDF report to the frontend."""
     report_path = Path("reports/audit_report.pdf")
     if report_path.exists():
         return FileResponse(
-            path=report_path, 
-            filename="Equitas_AI_Audit_Report.pdf",
-            media_type="application/pdf"
+            path=report_path,
+            filename="Equitas_AI_Report.pdf",
+            media_type="application/pdf",
         )
-    return {"error": "Report not found. Please run an audit first."}
+    return {"error": "No report found. Run an audit first."}
