@@ -223,3 +223,40 @@ async def ask_gemini(payload: dict):
         return {"answer": response.text.strip()}
     except Exception as e:
         return {"answer": f"Error: {str(e)}"}
+
+@app.post("/model-card")
+async def generate_model_card(payload: dict):
+    result = payload.get("result", {})
+    if not result:
+        return {"error": "No audit result provided."}
+
+    domain        = result.get("domain", "unknown")
+    sensitive     = ", ".join(result.get("sensitive_cols", []))
+    di            = result.get("disparate_impact_score", 0)
+    metrics       = result.get("metrics", {})
+    narrative     = result.get("explanations", {}).get("narrative", "")
+    fix           = result.get("remediation_applied", "None")
+    metrics_str   = "\n".join([f"- {k}: {v}" for k, v in metrics.items()])
+
+    prompt = (
+        f"Generate a structured Model Card for an AI system audited by Equitas AI.\n"
+        f"Domain: {domain}\n"
+        f"Sensitive attributes: {sensitive}\n"
+        f"Disparate Impact Ratio: {di}\n"
+        f"Fairness metrics:\n{metrics_str}\n"
+        f"Explainability: {narrative}\n"
+        f"Remediation applied: {fix}\n\n"
+        f"Write the Model Card with these exact sections:\n"
+        f"## Model Details\n## Intended Use\n## Factors\n## Metrics\n## Evaluation Data\n"
+        f"## Ethical Considerations\n## Recommendations\n\n"
+        f"Be concise. Each section 2-3 sentences. Plain English."
+    )
+
+    try:
+        import google.generativeai as genai
+        m        = genai.GenerativeModel("gemini-2.0-flash")
+        loop     = asyncio.get_running_loop()
+        response = await loop.run_in_executor(None, m.generate_content, prompt)
+        return {"card": response.text.strip()}
+    except Exception as e:
+        return {"error": str(e)}

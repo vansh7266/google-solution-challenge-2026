@@ -927,6 +927,12 @@
             animation: fade-in .4s .20s ease forwards;
             opacity: 0
         }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg)
+            }
+        }
     </style>
 </head>
 
@@ -999,6 +1005,13 @@
                         <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
                     </svg>
                     Ask Gemini
+                </div>
+                <div class="nav-item locked" data-v="modelcard" onclick="nav('modelcard')">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2" />
+                        <path d="M8 21h8M12 17v4" />
+                    </svg>
+                    Model Card
                 </div>
                 <div class="nav-label" style="margin-top:8px">Records</div>
                 <div class="nav-item" data-v="history" onclick="nav('history')">
@@ -1375,7 +1388,7 @@
         const TITLES = {
             upload: 'Upload Dataset', audit: 'Live Audit', dashboard: 'Bias Dashboard',
             explain: 'Explainability', remediate: 'Remediation', report: 'Audit Report',
-            history: 'Audit History', chat: 'Ask Gemini',
+            history: 'Audit History', chat: 'Ask Gemini', modelcard: 'Model Card',
         };
 
         function nav(v) {
@@ -1391,7 +1404,7 @@
             const inits = {
                 upload: initUpload, audit: initAudit, dashboard: initDashboard,
                 explain: initExplain, remediate: initRemediate,
-                report: initReport, history: initHistory, chat: initChat,
+                report: initReport, history: initHistory, chat: initChat, modelcard: initModelCard,
             };
             if (inits[v]) inits[v]();
         }
@@ -1483,7 +1496,7 @@
                 if (d.status === 'completed') { markNode(d.agent); updateLive(d); }
                 if (d.status === 'finished') {
                     STATE.result = d.result;
-                    unlock(['dashboard', 'explain', 'remediate', 'report', 'chat']);
+                    unlock(['dashboard', 'explain', 'remediate', 'report', 'chat', 'modelcard']);
                     setStatus('Complete', 'var(--green)');
                     es.close();
                     const st = document.getElementById('aud-st');
@@ -1884,6 +1897,50 @@
             log.scrollTop = log.scrollHeight;
         }
 
+        let MODEL_CARD_TEXT = '';
+
+        async function initModelCard() {
+            const el = document.getElementById('mc-body');
+            if (!STATE.result) {
+                el.innerHTML = '<div style="color:var(--t3);padding:20px 0">Run an audit first.</div>';
+                return;
+            }
+            try {
+                const res = await fetch(`${API}/model-card`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ result: STATE.result }),
+                });
+                const data = await res.json();
+                if (data.error) { el.textContent = 'Error: ' + data.error; return; }
+                MODEL_CARD_TEXT = data.card;
+                const sections = data.card.split('\n##').filter(Boolean);
+                el.innerHTML = sections.map(s => {
+                    const lines = ('##' + s).split('\n');
+                    const title = lines[0].replace(/##\s*/, '');
+                    const body = lines.slice(1).join('\n').trim();
+                    return `<div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--surface2)">
+        <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+          <span style="width:3px;height:13px;background:var(--blue);border-radius:2px;display:inline-block"></span>
+          ${title}
+        </div>
+        <p style="font-size:14px;color:var(--t1);line-height:1.8">${body}</p>
+      </div>`;
+                }).join('');
+            } catch (e) {
+                el.textContent = 'Error connecting to backend.';
+            }
+        }
+
+        function copyCard() {
+            if (!MODEL_CARD_TEXT) return;
+            navigator.clipboard.writeText(MODEL_CARD_TEXT).then(() => {
+                const btn = document.getElementById('mc-copy-btn');
+                btn.textContent = 'Copied!';
+                setTimeout(() => { btn.textContent = 'Copy Markdown'; }, 2000);
+            });
+        }
+
         /* ── Boot ── */
         document.addEventListener('DOMContentLoaded', () => {
             nav('upload');
@@ -1892,6 +1949,31 @@
             gsap.from('#app', { opacity: 0, duration: .5, delay: .2, ease: 'power2.out' });
         });
     </script>
+
+    <template id="tpl-modelcard">
+        <div class="fi" style="max-width:760px;margin:0 auto">
+            <div class="card" style="margin-bottom:16px">
+                <div
+                    style="background:var(--bg);border-radius:var(--r);padding:20px 24px;margin:-20px -24px 20px;border-bottom:2px solid var(--blue);display:flex;justify-content:space-between;align-items:center">
+                    <div>
+                        <div style="font-size:20px;font-weight:700;font-family:'Google Sans Display',sans-serif">Model
+                            Card</div>
+                        <div style="font-size:12px;color:var(--t3);margin-top:2px">Google Model Cards standard · Equitas
+                            AI</div>
+                    </div>
+                    <button class="btn btn-blue" id="mc-copy-btn" onclick="copyCard()">Copy Markdown</button>
+                </div>
+                <div id="mc-body" style="color:var(--t3);font-size:13px;padding:20px 0">
+                    <div style="display:flex;align-items:center;gap:12px">
+                        <div
+                            style="width:20px;height:20px;border:2px solid var(--blue);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite">
+                        </div>
+                        Generating with Gemini...
+                    </div>
+                </div>
+            </div>
+        </div>
+    </template>
 </body>
 
 </html>
