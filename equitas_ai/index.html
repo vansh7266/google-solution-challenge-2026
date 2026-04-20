@@ -946,6 +946,72 @@
                 transform: translateY(-6px)
             }
         }
+
+        .nav-item {
+            position: relative
+        }
+
+        .nav-item[data-tip]:hover::after {
+            content: attr(data-tip);
+            position: absolute;
+            left: calc(var(--sw) - 8px);
+            top: 50%;
+            transform: translateY(-50%);
+            background: var(--t1);
+            color: white;
+            font-size: 11px;
+            white-space: nowrap;
+            padding: 5px 10px;
+            border-radius: var(--rs);
+            z-index: 999;
+            pointer-events: none;
+            box-shadow: var(--shadow-md);
+            font-family: var(--fm)
+        }
+
+        .nav-item[data-tip]:hover::before {
+            content: '';
+            position: absolute;
+            left: calc(var(--sw) - 16px);
+            top: 50%;
+            transform: translateY(-50%);
+            border: 5px solid transparent;
+            border-right-color: var(--t1);
+            z-index: 999
+        }
+
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(32, 33, 36, .55);
+            z-index: 9000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            animation: fade-in .3s ease
+        }
+
+        .modal-box {
+            background: var(--surface);
+            border-radius: 16px;
+            padding: 36px;
+            max-width: 560px;
+            width: 90%;
+            box-shadow: 0 8px 32px rgba(60, 64, 67, .25);
+            animation: slide-up .35s ease
+        }
+
+        @keyframes slide-up {
+            from {
+                opacity: 0;
+                transform: translateY(20px)
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0)
+            }
+        }
     </style>
 </head>
 
@@ -963,24 +1029,23 @@
                     <div class="logo-text">Equitas AI</div>
                     <div class="logo-sub">Fairness Intelligence</div>
                 </div>
-            </div>
-            <nav class="sb-nav">
-                <div class="nav-label">Platform</div>
-                <div class="nav-item" data-v="upload" onclick="nav('upload')">
+                <div class="nav-item" data-v="upload" data-tip="Upload a CSV dataset to begin bias analysis"
+                    onclick="nav('upload')">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
                     </svg>
                     Upload Dataset
                 </div>
-                <div class="nav-item locked" data-v="audit" onclick="nav('audit')">
+                <div class="nav-item locked" data-v="audit" data-tip="Watch 5 AI agents audit your dataset live"
+                    onclick="nav('audit')">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="10" />
                         <path d="M12 6v6l4 2" />
                     </svg>
                     Live Audit
                 </div>
-                <div class="nav-label" style="margin-top:8px">Analysis</div>
-                <div class="nav-item locked" data-v="dashboard" onclick="nav('dashboard')">
+                <div class="nav-item locked" data-v="dashboard" data-tip="View all fairness metrics and bias score"
+                    onclick="nav('dashboard')">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="3" y="3" width="7" height="7" />
                         <rect x="14" y="3" width="7" height="7" />
@@ -989,21 +1054,24 @@
                     </svg>
                     Bias Dashboard
                 </div>
-                <div class="nav-item locked" data-v="explain" onclick="nav('explain')">
+                <div class="nav-item locked" data-v="explain" data-tip="SHAP feature importance + AI narrative"
+                    onclick="nav('explain')">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path
                             d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
                     </svg>
                     Explainability
                 </div>
-                <div class="nav-item locked" data-v="remediate" onclick="nav('remediate')">
+                <div class="nav-item locked" data-v="remediate" data-tip="See before/after fix comparison"
+                    onclick="nav('remediate')">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path
                             d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
                     </svg>
                     Remediation
                 </div>
-                <div class="nav-item locked" data-v="report" onclick="nav('report')">
+                <div class="nav-item locked" data-v="report" data-tip="Download styled PDF audit report"
+                    onclick="nav('report')">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
                         <polyline points="14 2 14 8 20 8" />
@@ -1013,39 +1081,42 @@
                     </svg>
                     Audit Report
                 </div>
-                <div class="nav-item locked" data-v="chat" onclick="nav('chat')">
+                <div class="nav-item locked" data-v="chat" data-tip="Ask FairBot anything about your audit"
+                    onclick="nav('chat')">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" />
                     </svg>
                     FairBot AI
                 </div>
-                <div class="nav-item locked" data-v="modelcard" onclick="nav('modelcard')">
+                <div class="nav-item locked" data-v="modelcard" data-tip="Generate Google-standard Model Card"
+                    onclick="nav('modelcard')">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <rect x="2" y="3" width="20" height="14" rx="2" />
                         <path d="M8 21h8M12 17v4" />
                     </svg>
                     Model Card
                 </div>
-                <div class="nav-item locked" data-v="whatif" onclick="nav('whatif')">
+                <div class="nav-item locked" data-v="whatif" data-tip="Simulate how data changes affect bias score"
+                    onclick="nav('whatif')">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
                     </svg>
                     What-If Simulator
                 </div>
-                <div class="nav-label" style="margin-top:8px">Records</div>
-                <div class="nav-item" data-v="history" onclick="nav('history')">
+                <div class="nav-item" data-v="history" data-tip="Browse all past audit results and trends"
+                    onclick="nav('history')">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
                     Audit History
                 </div>
-            </nav>
-            <div class="sb-foot">
-                <div class="sys-row">
-                    <span class="sys-dot blinking" id="sys-dot"></span>
-                    <span id="sys-status">System ready</span>
+                </nav>
+                <div class="sb-foot">
+                    <div class="sys-row">
+                        <span class="sys-dot blinking" id="sys-dot"></span>
+                        <span id="sys-status">System ready</span>
+                    </div>
                 </div>
-            </div>
         </aside>
 
         <div id="main">
@@ -2162,12 +2233,27 @@
             }
         }
 
+        function showWelcome() {
+            if (localStorage.getItem('equitas_welcomed')) return;
+            const modal = document.getElementById('welcome-modal');
+            if (modal) modal.style.display = 'flex';
+        }
+
+        function closeWelcome() {
+            const modal = document.getElementById('welcome-modal');
+            if (modal) modal.style.display = 'none';
+            if (document.getElementById('no-show')?.checked) {
+                localStorage.setItem('equitas_welcomed', '1');
+            }
+        }
+
         /* ── Boot ── */
         document.addEventListener('DOMContentLoaded', () => {
             nav('upload');
             gsap.from('#sidebar', { x: -20, opacity: 0, duration: .6, ease: 'power3.out' });
             gsap.from('#topbar', { y: -16, opacity: 0, duration: .6, delay: .1, ease: 'power3.out' });
             gsap.from('#app', { opacity: 0, duration: .5, delay: .2, ease: 'power2.out' });
+            setTimeout(showWelcome, 800);
         });
     </script>
 
@@ -2246,6 +2332,94 @@
             </div>
         </div>
     </template>
+
+
+    <div class="modal-overlay" id="welcome-modal" style="display:none">
+        <div class="modal-box">
+            <div style="display:flex;gap:5px;margin-bottom:16px">
+                <span style="width:10px;height:10px;border-radius:50%;background:#4285F4;display:inline-block"></span>
+                <span style="width:10px;height:10px;border-radius:50%;background:#EA4335;display:inline-block"></span>
+                <span style="width:10px;height:10px;border-radius:50%;background:#34A853;display:inline-block"></span>
+                <span style="width:10px;height:10px;border-radius:50%;background:#FBBC04;display:inline-block"></span>
+            </div>
+            <div
+                style="font-size:22px;font-weight:700;font-family:'Google Sans Display',sans-serif;color:var(--t1);margin-bottom:6px">
+                Welcome to Equitas AI</div>
+            <div style="font-size:13px;color:var(--t2);margin-bottom:24px;line-height:1.7">An autonomous bias detection
+                and remediation platform powered by Gemini AI agents. Here's how it works:</div>
+            <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:24px">
+                <div style="display:flex;align-items:flex-start;gap:14px">
+                    <div
+                        style="width:36px;height:36px;border-radius:10px;background:var(--blue-l);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1A73E8" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:2px">1. Upload a
+                            dataset</div>
+                        <div style="font-size:12px;color:var(--t2);line-height:1.6">Drop any CSV — hiring, lending,
+                            healthcare, criminal justice. Or pick a sample dataset to start instantly.</div>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:14px">
+                    <div
+                        style="width:36px;height:36px;border-radius:10px;background:var(--yellow-l);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F29900" stroke-width="2">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="M12 6v6l4 2" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:2px">2. Agents audit
+                            autonomously</div>
+                        <div style="font-size:12px;color:var(--t2);line-height:1.6">5 Gemini AI agents run in a
+                            LangGraph loop — profiling, detecting bias, explaining why, fixing it, then re-auditing
+                            until fair.</div>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:14px">
+                    <div
+                        style="width:36px;height:36px;border-radius:10px;background:var(--red-l);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C5221F" stroke-width="2">
+                            <path
+                                d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:2px">3. Review results
+                        </div>
+                        <div style="font-size:12px;color:var(--t2);line-height:1.6">See fairness metrics, regulatory
+                            violations, SHAP explanations, intersectional heatmaps, and a before/after remediation
+                            comparison.</div>
+                    </div>
+                </div>
+                <div style="display:flex;align-items:flex-start;gap:14px">
+                    <div
+                        style="width:36px;height:36px;border-radius:10px;background:var(--green-l);display:flex;align-items:center;justify-content:center;flex-shrink:0">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#188038" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" />
+                            <polyline points="14 2 14 8 20 8" />
+                        </svg>
+                    </div>
+                    <div>
+                        <div style="font-size:13px;font-weight:700;color:var(--t1);margin-bottom:2px">4. Export & ask
+                            FairBot</div>
+                        <div style="font-size:12px;color:var(--t2);line-height:1.6">Download a styled PDF report,
+                            generate a Google Model Card, simulate what-if scenarios, and ask FairBot any question about
+                            your audit.</div>
+                    </div>
+                </div>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between">
+                <label style="display:flex;align-items:center;gap:7px;font-size:12px;color:var(--t3);cursor:pointer">
+                    <input type="checkbox" id="no-show" style="accent-color:var(--blue)">
+                    Don't show again
+                </label>
+                <button onclick="closeWelcome()" class="btn btn-blue" style="padding:9px 24px">Get Started →</button>
+            </div>
+        </div>
+    </div>
 </body>
 
 </html>
