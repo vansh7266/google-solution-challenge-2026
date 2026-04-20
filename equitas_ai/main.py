@@ -260,3 +260,54 @@ async def generate_model_card(payload: dict):
         return {"card": response.text.strip()}
     except Exception as e:
         return {"error": str(e)}
+
+
+@app.post("/what-if")
+async def what_if_simulator(payload: dict):
+    dataset_path   = payload.get("dataset_path", "")
+    sensitive_col  = payload.get("sensitive_col", "")
+    target_col     = payload.get("target_col", "")
+    group_ratios   = payload.get("group_ratios", {})
+
+    if not dataset_path or not sensitive_col:
+        return {"error": "Missing parameters"}
+
+    try:
+        df = pd.read_csv(dataset_path)
+        if sensitive_col not in df.columns:
+            return {"error": f"Column '{sensitive_col}' not found"}
+
+        target = target_col if target_col in df.columns else df.columns[-1]
+        groups = df[sensitive_col].unique().tolist()
+
+        from agents.detector import _binarize, _dir_score
+        results = {}
+
+        for pct in range(10, 100, 10):
+            sim_df = df.copy()
+            priv   = groups[0]
+            n_priv = int(len(sim_df) * pct / 100)
+            n_unpriv = len(sim_df) - n_priv
+            idx_priv   = sim_df[sim_df[sensitive_col] == priv].index
+            idx_unpriv = sim_df[sim_df[sensitive_col] != priv].index
+            keep_priv   = idx_priv[:n_priv]
+            keep_unpriv = idx_unpriv[:n_unpriv]
+            sim_df = sim_df.loc[list(keep_priv) + list(keep_unpriv)]
+            if len(sim_df) < 10:
+                results[pct] = None
+                continue
+            try:
+                score = _dir_score(sim_df, sensitive_col, target)
+                results[pct] = round(score, 3)
+            except Exception:
+                results[pct] = None
+
+        return {
+            "groups":         groups,
+            "sensitive_col":  sensitive_col,
+            "target_col":     target,
+            "scores":         results,
+        }
+
+    except Exception as e:
+        return {"error": str(e)}

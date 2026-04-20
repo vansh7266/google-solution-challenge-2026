@@ -1013,6 +1013,12 @@
                     </svg>
                     Model Card
                 </div>
+                <div class="nav-item locked" data-v="whatif" onclick="nav('whatif')">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" />
+                    </svg>
+                    What-If Simulator
+                </div>
                 <div class="nav-label" style="margin-top:8px">Records</div>
                 <div class="nav-item" data-v="history" onclick="nav('history')">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1388,7 +1394,7 @@
         const TITLES = {
             upload: 'Upload Dataset', audit: 'Live Audit', dashboard: 'Bias Dashboard',
             explain: 'Explainability', remediate: 'Remediation', report: 'Audit Report',
-            history: 'Audit History', chat: 'Ask Gemini', modelcard: 'Model Card',
+            history: 'Audit History', chat: 'Ask Gemini', modelcard: 'Model Card', whatif: 'What-If Simulator',
         };
 
         function nav(v) {
@@ -1405,6 +1411,7 @@
                 upload: initUpload, audit: initAudit, dashboard: initDashboard,
                 explain: initExplain, remediate: initRemediate,
                 report: initReport, history: initHistory, chat: initChat, modelcard: initModelCard,
+                whatif: initWhatIf,
             };
             if (inits[v]) inits[v]();
         }
@@ -1496,7 +1503,7 @@
                 if (d.status === 'completed') { markNode(d.agent); updateLive(d); }
                 if (d.status === 'finished') {
                     STATE.result = d.result;
-                    unlock(['dashboard', 'explain', 'remediate', 'report', 'chat', 'modelcard']);
+                    unlock(['dashboard', 'explain', 'remediate', 'report', 'chat', 'modelcard', 'whatif']);
                     setStatus('Complete', 'var(--green)');
                     es.close();
                     const st = document.getElementById('aud-st');
@@ -1941,6 +1948,100 @@
             });
         }
 
+        let WI_DATA = {};
+
+        async function initWhatIf() {
+            const r = STATE.result;
+            if (!r || !r.dataset_path || r.dataset_path === 'demo') {
+                document.getElementById('app').innerHTML = '<div style="padding:60px;text-align:center;color:var(--t3)">Run a real audit first (not demo mode) to use the simulator.</div>';
+                return;
+            }
+
+            const di = +r.disparate_impact_score;
+            const color = di < 0.6 ? 'var(--red-d)' : di < 0.8 ? 'var(--yellow-d)' : 'var(--green-d)';
+            const cur = document.getElementById('wi-current');
+            if (cur) { cur.textContent = di.toFixed(3); cur.style.color = color; }
+
+            const lbl = document.getElementById('wi-col-label');
+            const sens = (r.sensitive_cols || [])[0] || 'sensitive column';
+            if (lbl) lbl.textContent = `Proportion of majority group in "${sens}"`;
+
+            const loading = document.getElementById('wi-loading');
+            if (loading) loading.style.display = 'block';
+
+            try {
+                const res = await fetch(`${API}/what-if`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        dataset_path: r.dataset_path,
+                        sensitive_col: sens,
+                        target_col: '',
+                    }),
+                });
+                const data = await res.json();
+                if (data.error) { if (loading) loading.textContent = 'Error: ' + data.error; return; }
+                WI_DATA = data.scores || {};
+                if (loading) loading.style.display = 'none';
+                buildWiChart();
+                updateWhatIf(document.getElementById('wi-slider')?.value || 50);
+            } catch (e) {
+                if (loading) loading.textContent = 'Error connecting to backend.';
+            }
+        }
+
+        function buildWiChart() {
+            const ctx = document.getElementById('wi-chart'); if (!ctx) return;
+            const labels = Object.keys(WI_DATA).map(k => `${k}%`);
+            const values = Object.values(WI_DATA).map(v => v ?? null);
+            const colors = values.map(v => v == null ? '#DADCE0' : v < 0.6 ? '#EA4335' : v < 0.8 ? '#FBBC04' : '#34A853');
+
+            STATE.charts.wi = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels,
+                    datasets: [
+                        { data: values, backgroundColor: colors, borderRadius: 5, borderSkipped: false },
+                        { type: 'line', data: labels.map(() => 0.8), borderColor: '#4285F4', borderDash: [5, 4], borderWidth: 1.5, pointRadius: 0, fill: false },
+                    ],
+                },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    animation: { duration: 800, easing: 'easeOutQuart' },
+                    plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` DIR: ${c.raw?.toFixed(3) ?? 'N/A'}` } } },
+                    scales: {
+                        x: { grid: { color: '#F1F3F4' }, ticks: { color: '#5F6368', font: { family: 'Roboto Mono', size: 11 } } },
+                        y: { min: 0, max: 1.1, grid: { color: '#F1F3F4' }, ticks: { color: '#5F6368', font: { family: 'Roboto Mono' } } },
+                    },
+                },
+            });
+        }
+
+        function updateWhatIf(val) {
+            const pct = parseInt(val);
+            const lbl = document.getElementById('wi-pct-label');
+            if (lbl) lbl.textContent = pct + '%';
+
+            const score = WI_DATA[pct];
+            const sim = document.getElementById('wi-simulated');
+            const verd = document.getElementById('wi-verdict');
+            if (!sim) return;
+
+            if (score == null) { sim.textContent = 'N/A'; sim.style.color = 'var(--t3)'; if (verd) verd.textContent = 'Insufficient data'; return; }
+
+            const color = score < 0.6 ? 'var(--red-d)' : score < 0.8 ? 'var(--yellow-d)' : 'var(--green-d)';
+            sim.textContent = score.toFixed(3);
+            sim.style.color = color;
+
+            const actual = STATE.result ? +STATE.result.disparate_impact_score : null;
+            if (verd && actual != null) {
+                const delta = score - actual;
+                const pass = score >= 0.8;
+                verd.textContent = (pass ? 'Passes threshold' : 'Fails threshold') + (delta >= 0 ? ` (+${delta.toFixed(3)})` : ` (${delta.toFixed(3)})`);
+                verd.style.color = pass ? 'var(--green-d)' : 'var(--red-d)';
+            }
+        }
+
         /* ── Boot ── */
         document.addEventListener('DOMContentLoaded', () => {
             nav('upload');
@@ -1949,6 +2050,57 @@
             gsap.from('#app', { opacity: 0, duration: .5, delay: .2, ease: 'power2.out' });
         });
     </script>
+
+    <template id="tpl-whatif">
+        <div class="fi" style="max-width:800px;margin:0 auto">
+            <div class="card" style="margin-bottom:16px">
+                <div class="sec-head">What-If Simulator</div>
+                <p style="font-size:13px;color:var(--t2);margin-bottom:20px">Adjust the proportion of the privileged
+                    group in training data and see how the Disparate Impact score changes in real time.</p>
+                <div style="margin-bottom:24px">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                        <span style="font-size:13px;font-weight:500;color:var(--t1)" id="wi-col-label">Sensitive
+                            attribute ratio</span>
+                        <span style="font-size:13px;font-family:var(--fm);color:var(--blue);font-weight:600"
+                            id="wi-pct-label">50%</span>
+                    </div>
+                    <input type="range" id="wi-slider" min="10" max="90" step="10" value="50"
+                        style="width:100%;accent-color:var(--blue);cursor:pointer" oninput="updateWhatIf(this.value)">
+                    <div
+                        style="display:flex;justify-content:space-between;font-size:10px;color:var(--t3);margin-top:4px">
+                        <span>10% privileged</span><span>50%</span><span>90% privileged</span>
+                    </div>
+                </div>
+                <div class="g2" style="margin-bottom:20px">
+                    <div style="background:var(--bg);border-radius:var(--r);padding:16px;text-align:center">
+                        <div
+                            style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">
+                            Current DIR</div>
+                        <div style="font-size:36px;font-weight:700;font-family:'Google Sans Display',sans-serif"
+                            id="wi-current">—</div>
+                        <div style="font-size:11px;color:var(--t2);margin-top:4px">From your audit</div>
+                    </div>
+                    <div style="background:var(--bg);border-radius:var(--r);padding:16px;text-align:center">
+                        <div
+                            style="font-size:11px;color:var(--t3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">
+                            Simulated DIR</div>
+                        <div style="font-size:36px;font-weight:700;font-family:'Google Sans Display',sans-serif"
+                            id="wi-simulated">—</div>
+                        <div style="font-size:11px;color:var(--t2);margin-top:4px" id="wi-verdict">Adjust slider to
+                            simulate</div>
+                    </div>
+                </div>
+                <div id="wi-loading" style="display:none;text-align:center;padding:16px;color:var(--t3);font-size:13px">
+                    Computing simulations...</div>
+            </div>
+            <div class="card">
+                <div class="sec-head">DIR across all group ratios</div>
+                <div style="position:relative;height:220px"><canvas id="wi-chart"></canvas></div>
+                <div style="font-size:11px;color:var(--t3);margin-top:10px;text-align:center">Blue dashed line = 0.80
+                    fairness threshold · Each point = one simulation run</div>
+            </div>
+        </div>
+    </template>
 
     <template id="tpl-modelcard">
         <div class="fi" style="max-width:760px;margin:0 auto">
