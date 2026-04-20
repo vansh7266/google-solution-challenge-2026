@@ -57,22 +57,6 @@
             overflow: hidden
         }
 
-        .shimmer {
-            background: linear-gradient(90deg, var(--surface2) 25%, var(--border) 50%, var(--surface2) 75%);
-            background-size: 200% 100%;
-            animation: shimmer 1.5s infinite linear;
-            border-radius: var(--r);
-            color: transparent !important;
-            min-height: 20px;
-        }
-
-        .shimmer * { visibility: hidden; }
-
-        @keyframes shimmer {
-            0% { background-position: 200% 0 }
-            100% { background-position: -200% 0 }
-        }
-
         body {
             background: var(--bg);
             color: var(--t1);
@@ -157,23 +141,20 @@
             color: var(--t2);
             font-size: 14px;
             font-weight: 500;
-            transition: all .2s cubic-bezier(.4,0,.2,1);
+            transition: all .15s;
             user-select: none;
-            margin-bottom: 2px;
-            border-left: 3px solid transparent
+            margin-bottom: 2px
         }
 
         .nav-item:hover {
             background: var(--surface2);
-            color: var(--t1);
-            transform: translateX(2px)
+            color: var(--t1)
         }
 
         .nav-item.active {
             background: var(--blue-l);
             color: var(--blue-d);
-            font-weight: 700;
-            border-left-color: var(--blue)
+            font-weight: 700
         }
 
         .nav-item.locked {
@@ -326,13 +307,7 @@
             border: 1px solid var(--border);
             border-radius: var(--r-lg);
             padding: 20px 24px;
-            box-shadow: var(--shadow);
-            transition: box-shadow .25s ease, transform .25s ease
-        }
-
-        .card:hover {
-            box-shadow: var(--shadow-md);
-            transform: translateY(-2px)
+            box-shadow: var(--shadow)
         }
 
         .g2 {
@@ -354,7 +329,7 @@
         }
 
         .sec-head {
-            font-size: 14px;
+            font-size: 13px;
             font-weight: 700;
             color: var(--t1);
             margin-bottom: 14px;
@@ -377,13 +352,7 @@
             border: 1px solid var(--border);
             border-radius: var(--r-lg);
             padding: 18px 20px;
-            box-shadow: var(--shadow);
-            transition: transform .2s ease, box-shadow .2s ease
-        }
-
-        .mcard:hover {
-            transform: translateY(-3px) scale(1.01);
-            box-shadow: var(--shadow-md)
+            box-shadow: var(--shadow)
         }
 
         .m-lbl {
@@ -473,20 +442,14 @@
             border: 1px solid var(--border);
             background: var(--surface);
             color: var(--t2);
-            transition: all .2s cubic-bezier(.4,0,.2,1);
+            transition: all .2s;
             letter-spacing: .2px
         }
 
         .btn:hover {
             background: var(--surface2);
             border-color: var(--t3);
-            color: var(--t1);
-            transform: translateY(-1px);
-            box-shadow: 0 2px 6px rgba(60,64,67,.12)
-        }
-
-        .btn:active {
-            transform: translateY(0) scale(.97)
+            color: var(--t1)
         }
 
         .btn-blue {
@@ -498,12 +461,7 @@
         .btn-blue:hover {
             background: var(--blue-d);
             border-color: var(--blue-d);
-            color: white;
-            box-shadow: 0 3px 10px rgba(66,133,244,.3)
-        }
-
-        .btn-blue:active {
-            transform: translateY(0) scale(.97)
+            color: white
         }
 
         .btn-outline {
@@ -581,17 +539,7 @@
         .dropzone:hover,
         .dropzone.over {
             border-color: var(--blue);
-            background: var(--blue-l);
-            transform: scale(1.01)
-        }
-
-        @keyframes float-icon {
-            0%, 100% { transform: translateY(0) }
-            50% { transform: translateY(-6px) }
-        }
-
-        .dropzone svg {
-            animation: float-icon 3s ease-in-out infinite
+            background: var(--blue-l)
         }
 
         .dz-title {
@@ -1744,28 +1692,6 @@
         const NODES = ['profiler', 'detector', 'remediator', 'explainer', 'reporter'];
         let nodesDone = 0;
 
-        // Custom counter animation for metric cards
-        function animateValue(obj, start, end, duration) {
-            if (!obj) return;
-            let startTimestamp = null;
-            const step = (timestamp) => {
-                if (!startTimestamp) startTimestamp = timestamp;
-                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-                // Ease out sine
-                const easeProgress = Math.sin((progress * Math.PI) / 2);
-                const current = easeProgress * (end - start) + start;
-                
-                // Keep 3 decimals if float, else round
-                obj.textContent = end % 1 !== 0 ? current.toFixed(3) : Math.floor(current);
-                if (progress < 1) {
-                    window.requestAnimationFrame(step);
-                } else {
-                    obj.textContent = end % 1 !== 0 ? end.toFixed(3) : end;
-                }
-            };
-            window.requestAnimationFrame(step);
-        }
-
         const TITLES = {
             upload: 'Upload Dataset', audit: 'Live Audit', dashboard: 'Bias Dashboard',
             explain: 'Explainability', remediate: 'Remediation', report: 'Audit Report',
@@ -1776,33 +1702,19 @@
             STATE.view = v;
             document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.v === v));
             document.getElementById('tb-title').textContent = TITLES[v] || v;
-            
+            Object.values(STATE.charts).forEach(c => { try { c.destroy(); } catch (_) { } });
+            STATE.charts = {};
             const app = document.getElementById('app');
-            
-            // GSAP Smooth View Transition
-            gsap.to(app, {
-                opacity: 0, scale: 0.98, y: 10, duration: 0.15, ease: 'power2.in', onComplete: () => {
-                    Object.values(STATE.charts).forEach(c => { try { c.destroy(); } catch (_) { } });
-                    STATE.charts = {};
-                    app.innerHTML = '';
-                    
-                    const tpl = document.getElementById('tpl-' + v);
-                    if (tpl) app.appendChild(tpl.content.cloneNode(true));
-                    
-                    const inits = {
-                        upload: initUpload, audit: initAudit, dashboard: initDashboard,
-                        explain: initExplain, remediate: initRemediate,
-                        report: initReport, history: initHistory, chat: initChat, modelcard: initModelCard,
-                        whatif: initWhatIf,
-                    };
-                    if (inits[v]) inits[v]();
-                    
-                    gsap.fromTo(app, 
-                        { opacity: 0, scale: 0.98, y: 10 }, 
-                        { opacity: 1, scale: 1, y: 0, duration: 0.35, ease: 'power3.out' }
-                    );
-                }
-            });
+            app.innerHTML = '';
+            const tpl = document.getElementById('tpl-' + v);
+            if (tpl) app.appendChild(tpl.content.cloneNode(true));
+            const inits = {
+                upload: initUpload, audit: initAudit, dashboard: initDashboard,
+                explain: initExplain, remediate: initRemediate,
+                report: initReport, history: initHistory, chat: initChat, modelcard: initModelCard,
+                whatif: initWhatIf,
+            };
+            if (inits[v]) inits[v]();
         }
 
         function unlock(views) {
@@ -1946,13 +1858,11 @@
 
             document.getElementById('vsub').textContent = `Domain: ${(r.domain || '').replace('_', ' ')} · Sensitive attributes: ${(r.sensitive_cols || []).join(', ')}`;
             document.getElementById('vbdg').innerHTML = `<span class="badge ${di < 0.6 ? 'badge-red' : di < 0.8 ? 'badge-yellow' : 'badge-green'}">${di < 0.6 ? 'Critical' : di < 0.8 ? 'Warning' : 'Pass'}</span>`;
-            if(initDi) animateValue(document.getElementById('d-init'), 0, initDi, 1200);
-            if(di) animateValue(document.getElementById('d-final'), 0, di, 1400);
-            
+            document.getElementById('d-init').textContent = initDi.toFixed(3);
+            document.getElementById('d-final').textContent = di.toFixed(3);
             document.getElementById('d-domain').textContent = (r.domain || '—').replace('_', ' ');
             document.getElementById('d-sens').textContent = (r.sensitive_cols || []).join(', ') || '—';
-            
-            if(r.iteration_count) animateValue(document.getElementById('d-iter'), 0, r.iteration_count, 1000);
+            document.getElementById('d-iter').textContent = r.iteration_count ?? '—';
             document.getElementById('d-narr').textContent = r.explanations?.narrative || '—';
             document.getElementById('d-ctx').textContent = r.domain_context || '—';
 
@@ -2611,8 +2521,13 @@
                     </div>
                     <button class="btn btn-blue" id="mc-copy-btn" onclick="copyCard()">Copy Markdown</button>
                 </div>
-                <div id="mc-body" style="color:var(--t3);font-size:13px;padding:20px 0" class="shimmer">
-                    Generating with Gemini...
+                <div id="mc-body" style="color:var(--t3);font-size:13px;padding:20px 0">
+                    <div style="display:flex;align-items:center;gap:12px">
+                        <div
+                            style="width:20px;height:20px;border:2px solid var(--blue);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite">
+                        </div>
+                        Generating with Gemini...
+                    </div>
                 </div>
             </div>
         </div>
