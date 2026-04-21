@@ -2,11 +2,11 @@ import pandas as pd
 import json
 import os
 import asyncio
+import re
 from .state import AuditState
 from .ai_config import get_model, run_model_async
 
 model = get_model("gemini-2.5-flash-lite")
-
 
 async def agent_profiler(state: AuditState) -> AuditState:
     if state.get("demo_mode", False):
@@ -33,21 +33,37 @@ async def agent_profiler(state: AuditState) -> AuditState:
     )
 
     response = await run_model_async(model, prompt)
-
+    detected_cols = []
+    
     try:
-        raw = response.text.replace("```json", "").replace("```", "").strip()
+        # Robust JSON extraction
+        text = response.text
+        match = re.search(r'\{.*\}', text, re.DOTALL)
+        raw = match.group(0) if match else text
         result = json.loads(raw)
-        return {
-            **state,
-            "domain": result.get("domain", "unknown"),
-            "domain_context": result.get("domain_context", ""),
-            "sensitive_cols": result.get("sensitive_cols", []),
-        }
-    except Exception:
-        fallback = [c for c in columns if c.lower() in ["age", "gender", "sex", "race", "ethnicity", "religion", "nationality"]]
-        return {
-            **state,
-            "domain": "unknown",
-            "domain_context": "",
-            "sensitive_cols": fallback,
-        }
+        
+        domain = result.get("domain", "unknown")
+        context = result.get("domain_context", "")
+        detected_cols = result.get("sensitive_cols", [])
+        
+    except Exception as e:
+        domain = "unknown"
+        context = f"Automatic detection fallback enabled. (Note: {str(e)[:40]}...)"
+        detected_cols = []
+
+    # CRITICAL FALLBACK: Keyword sweep to ensure we never miss sensitive attributes
+    keywords = ["age", "gender", "sex", "race", "ethnic", "region", "relig", "nation", "disabil"]
+    backup_cols = [c for c in columns if any(k in c.lower() for k in keywords)]
+    
+    # Merge AI detected and backup keywords, keeping unique values
+    final_cols = list(set(detected_cols + backup_cols))
+    
+    # Prune non-existent columns just in case AI imagined some
+    final_cols = [c for c in final_cols if c in columns]
+
+    return {
+        **state,
+        "domain": domain,
+        "domain_context": context,
+        "sensitive_cols": final_cols,
+    }
