@@ -8,16 +8,21 @@ from .state import AuditState
 
 
 def _binarize(s: pd.Series, domain: str = "general") -> np.ndarray:
-    if s.dtype == object or str(s.dtype) == "category":
-        enc = LabelEncoder().fit_transform(s.astype(str))
-        target_val = enc.min() if domain == "criminal_justice" else enc.max()
-        return (enc == target_val).astype(int)
+    # Try numeric conversion first
+    numeric = pd.to_numeric(s, errors='coerce')
+    is_numeric = numeric.notna().sum() > len(s) * 0.5  # at least 50% parseable as numbers
     
-    # Numerical target handling
-    if domain == "criminal_justice":
-        # In COMPAS, 0 is 'no recidivism', which is the good outcome.
-        return (s == 0).astype(int)
-    return (s > s.median()).astype(int)
+    if is_numeric:
+        numeric = numeric.fillna(0)
+        if domain == "criminal_justice":
+            return (numeric == 0).astype(int)
+        med = numeric.median()
+        return (numeric > med).astype(int)
+    
+    # Categorical / string fallback
+    enc = LabelEncoder().fit_transform(s.astype(str))
+    target_val = enc.min() if domain == "criminal_justice" else enc.max()
+    return (enc == target_val).astype(int)
 
 
 
