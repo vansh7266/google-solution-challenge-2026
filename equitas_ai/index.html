@@ -2564,6 +2564,7 @@
                         dataset_path: r.dataset_path,
                         sensitive_col: sens,
                         target_col: '',
+                        domain: r.domain || 'general',
                     }),
                 });
                 const data = await res.json();

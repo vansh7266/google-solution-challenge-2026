@@ -20,20 +20,12 @@ def _binarize(s: pd.Series, domain: str = "general") -> np.ndarray:
     return (s > s.median()).astype(int)
 
 
-def _dir_score(df: pd.DataFrame, sensitive_col: str, target_col: str) -> float:
-    y = _binarize(df[target_col])
-    tmp = df.copy()
-    tmp["_y"] = y
-    rates = tmp.groupby(sensitive_col)["_y"].mean()
-    if len(rates) < 2 or rates.max() == 0:
-        return 1.0
-    return round(float(rates.min() / rates.max()), 3)
 
 
-def _model_metrics(df: pd.DataFrame, sensitive_col: str, target_col: str) -> dict:
+def _model_metrics(df: pd.DataFrame, sensitive_col: str, target_col: str, domain: str = "general") -> dict:
     sample = df.sample(n=min(2000, len(df)), random_state=42).dropna()
     X = sample.drop(columns=[target_col])
-    y = _binarize(sample[target_col])
+    y = _binarize(sample[target_col], domain)
     X_enc = X.apply(lambda c: LabelEncoder().fit_transform(c.astype(str)))
     clf = LogisticRegression(max_iter=300, C=0.1, random_state=42)
     clf.fit(X_enc, y)
@@ -119,7 +111,7 @@ async def agent_bias_detector(state: AuditState) -> AuditState:
     di = round(float(rates.min() / rates.max()), 3) if len(rates) >= 2 and rates.max() > 0 else 1.0
 
     try:
-        m = _model_metrics(df, sensitive_col, target_col)
+        m = _model_metrics(df, sensitive_col, target_col, domain)
     except Exception:
         m = {"dp": 0.0, "eo": 0.0, "eod": 0.0, "pp": 0.0}
 
