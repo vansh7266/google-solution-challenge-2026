@@ -6,6 +6,8 @@ import pandas as pd
 from pathlib import Path
 from typing import AsyncGenerator, Any
 from dotenv import load_dotenv
+from pydantic import BaseModel
+import datetime
 
 load_dotenv()
 
@@ -148,6 +150,34 @@ async def audit_stream(filepath: str = Query(...), demo: bool = Query(False)):
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
+class HitlApproval(BaseModel):
+    filepath: str
+    status: str
+    justification: str = ""
+
+@app.post("/approve-hitl")
+async def approve_hitl(data: HitlApproval):
+    try:
+        # Create a formal audit trail log of the human approval
+        log_dir = Path("audit_history/approvals")
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        log_file = log_dir / f"approval_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.json"
+        
+        record = {
+            "timestamp": datetime.datetime.now().isoformat(),
+            "acted_on_dataset": data.filepath,
+            "status": data.status,
+            "human_justification": data.justification,
+            "system": "Equitas AI HITL Router"
+        }
+        
+        with open(log_file, "w") as f:
+            json.dump(record, f, indent=4)
+            
+        return {"success": True, "message": "HITL fix officially approved and logged", "log": str(log_file)}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 @app.get("/history")
 async def get_history():
@@ -217,7 +247,7 @@ async def ask_gemini(payload: dict):
     )
     try:
         import google.generativeai as genai
-        m = genai.GenerativeModel("gemini-2.0-flash")
+        m = genai.GenerativeModel("gemini-2.5-flash-lite")
         loop = asyncio.get_running_loop()
         response = await loop.run_in_executor(None, m.generate_content, prompt)
         return {"answer": response.text.strip()}
@@ -254,10 +284,15 @@ async def generate_model_card(payload: dict):
 
     try:
         import google.generativeai as genai
-        m        = genai.GenerativeModel("gemini-2.0-flash")
-        loop     = asyncio.get_running_loop()
-        response = await loop.run_in_executor(None, m.generate_content, prompt)
-        return {"card": response.text.strip()}
+        from fastapi.responses import StreamingResponse
+        m = genai.GenerativeModel("gemini-2.5-flash-lite")
+        
+        async def generate():
+            response = await asyncio.to_thread(m.generate_content, prompt, stream=True)
+            for chunk in response:
+                yield chunk.text
+
+        return StreamingResponse(generate(), media_type="text/plain")
     except Exception as e:
         return {"error": str(e)}
 
@@ -284,18 +319,21 @@ async def what_if_simulator(payload: dict):
         results = {}
 
         for pct in range(10, 100, 10):
-            sim_df = df.copy()
-            priv   = groups[0]
-            n_priv = int(len(sim_df) * pct / 100)
-            n_unpriv = len(sim_df) - n_priv
-            idx_priv   = sim_df[sim_df[sensitive_col] == priv].index
-            idx_unpriv = sim_df[sim_df[sensitive_col] != priv].index
-            keep_priv   = idx_priv[:n_priv]
-            keep_unpriv = idx_unpriv[:n_unpriv]
-            sim_df = sim_df.loc[list(keep_priv) + list(keep_unpriv)]
-            if len(sim_df) < 10:
+            priv = groups[0]
+            n_priv = max(10, int(len(df) * pct / 100))
+            n_unpriv = max(10, len(df) - n_priv)
+            
+            df_priv = df[df[sensitive_col] == priv]
+            df_unpriv = df[df[sensitive_col] != priv]
+            
+            if len(df_priv) == 0 or len(df_unpriv) == 0:
                 results[pct] = None
                 continue
+                
+            sim_df = pd.concat([
+                df_priv.sample(n=n_priv, replace=True, random_state=42),
+                df_unpriv.sample(n=n_unpriv, replace=True, random_state=42)
+            ])
             try:
                 score = _dir_score(sim_df, sensitive_col, target)
                 results[pct] = round(score, 3)

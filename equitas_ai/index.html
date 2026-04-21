@@ -166,7 +166,8 @@
         .nav-item:hover {
             background: var(--surface2);
             color: var(--t1);
-            transform: translateX(2px)
+            padding-left: 14px;
+            padding-right: 10px
         }
 
         .nav-item.active {
@@ -1265,6 +1266,14 @@
                     </svg>
                     Remediation
                 </div>
+                <div class="nav-item locked" data-v="hitl" data-tip="Review and approve AI-generated fixes"
+                    onclick="nav('hitl')">
+                    <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M9 11l3 3L22 4" />
+                        <path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11" />
+                    </svg>
+                    Review Fixes
+                </div>
                 <div class="nav-item locked" data-v="report" data-tip="Download styled PDF audit report"
                     onclick="nav('report')">
                     <svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1744,6 +1753,20 @@
         const NODES = ['profiler', 'detector', 'remediator', 'explainer', 'reporter'];
         let nodesDone = 0;
 
+        // Staggered Chart.js Cascade Animation
+        const staggeredAnim = {
+            duration: 1000,
+            easing: 'easeOutQuart',
+            delay: (context) => {
+                let delay = 0;
+                if (context.type === 'data' && context.mode === 'default' && !context.chart.animated) {
+                    delay = context.dataIndex * 150 + context.datasetIndex * 100;
+                }
+                return delay;
+            },
+            onComplete: (context) => { context.chart.animated = true; }
+        };
+
         // Custom counter animation for metric cards
         function animateValue(obj, start, end, duration) {
             if (!obj) return;
@@ -1768,7 +1791,7 @@
 
         const TITLES = {
             upload: 'Upload Dataset', audit: 'Live Audit', dashboard: 'Bias Dashboard',
-            explain: 'Explainability', remediate: 'Remediation', report: 'Audit Report',
+            explain: 'Explainability', remediate: 'Remediation', hitl: 'Human-in-the-Loop Review', report: 'Audit Report',
             history: 'Audit History', chat: 'FairBot — AI Assistant', modelcard: 'Model Card', whatif: 'What-If Simulator',
         };
 
@@ -1791,7 +1814,7 @@
                     
                     const inits = {
                         upload: initUpload, audit: initAudit, dashboard: initDashboard,
-                        explain: initExplain, remediate: initRemediate,
+                        explain: initExplain, remediate: initRemediate, hitl: initHitl,
                         report: initReport, history: initHistory, chat: initChat, modelcard: initModelCard,
                         whatif: initWhatIf,
                     };
@@ -1892,12 +1915,17 @@
                 if (d.status === 'completed') { markNode(d.agent); updateLive(d); }
                 if (d.status === 'finished') {
                     STATE.result = d.result;
-                    unlock(['dashboard', 'explain', 'remediate', 'report', 'chat', 'modelcard', 'whatif']);
+                    unlock(['dashboard', 'explain', 'remediate', 'hitl', 'report', 'chat', 'modelcard', 'whatif']);
                     setStatus('Complete', 'var(--green)');
                     es.close();
                     const st = document.getElementById('aud-st');
-                    if (st) { st.textContent = 'Audit complete — loading dashboard...'; st.style.color = 'var(--green)'; }
-                    setTimeout(() => nav('dashboard'), 1400);
+                    if (d.result.hitl_diff && d.result.hitl_diff.length > 0) {
+                        if (st) { st.textContent = 'Review required — routing to remediator...'; st.style.color = 'var(--yellow)'; }
+                        setTimeout(() => nav('hitl'), 1400);
+                    } else {
+                        if (st) { st.textContent = 'Audit complete — loading dashboard...'; st.style.color = 'var(--green)'; }
+                        setTimeout(() => nav('dashboard'), 1400);
+                    }
                 }
             };
             es.onerror = () => { addLog('Connection lost.', 'e'); setStatus('Disconnected', 'var(--red)'); es.close(); };
@@ -2075,7 +2103,7 @@
                 data: { labels, datasets: [{ data: values, backgroundColor: colors, borderRadius: 5, borderSkipped: false }] },
                 options: {
                     responsive: true, maintainAspectRatio: false, indexAxis: 'y',
-                    animation: { duration: 900, easing: 'easeOutQuart' },
+                    animation: staggeredAnim,
                     plugins: { legend: { display: false } },
                     scales: {
                         x: { min: 0, max: 1.1, grid: { color: '#F1F3F4' }, ticks: { color: '#5F6368', font: { family: 'Roboto Mono', size: 11 } } },
@@ -2116,7 +2144,7 @@
                 data: { labels: shap.map(f => f.feature), datasets: [{ data: shap.map(f => f.importance), backgroundColor: '#4285F4', borderRadius: 5, borderSkipped: false }] },
                 options: {
                     responsive: true, maintainAspectRatio: false, indexAxis: 'y',
-                    animation: { duration: 900, easing: 'easeOutQuart' },
+                    animation: staggeredAnim,
                     plugins: { legend: { display: false } },
                     scales: {
                         x: { grid: { color: '#F1F3F4' }, ticks: { color: '#5F6368', font: { family: 'Roboto Mono' } } },
@@ -2150,7 +2178,7 @@
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
-                    animation: { duration: 900, easing: 'easeOutQuart' },
+                    animation: staggeredAnim,
                     plugins: { legend: { labels: { color: '#5F6368', font: { family: 'Roboto Mono' } } } },
                     scales: {
                         x: { grid: { color: '#F1F3F4' }, ticks: { color: '#5F6368', font: { family: 'Roboto Mono', size: 10 }, maxRotation: 30 } },
@@ -2158,6 +2186,102 @@
                     },
                 },
             });
+        }
+
+        /* ── Human In The Loop ── */
+        function initHitl() {
+            const r = STATE.result;
+            if (!r || !r.hitl_diff) return;
+
+            document.getElementById('hitl-domain').textContent = (r.domain || 'dataset').replace('_', ' ');
+            document.getElementById('hitl-score-orig').textContent = (+r.initial_disparate_impact).toFixed(3);
+            document.getElementById('hitl-score-new').textContent = (+r.disparate_impact_score).toFixed(3);
+            
+            const just = document.getElementById('hitl-just');
+            if (just) just.innerHTML = `<strong>Remediation Pipeline:</strong> ${r.hitl_justification || r.remediation_applied}`;
+
+            const tOrig = document.getElementById('hitl-orig-body');
+            const tNew = document.getElementById('hitl-new-body');
+            if (!tOrig || !tNew) return;
+
+            tOrig.innerHTML = '';
+            tNew.innerHTML = '';
+
+            r.hitl_diff.forEach(row => {
+                const trOrig = document.createElement('tr');
+                trOrig.innerHTML = `<td>${row.id}</td><td style="color:var(--red-d);font-weight:700">${row.race}</td><td>${row.sex}</td><td>${row.original_score}</td>`;
+                tOrig.appendChild(trOrig);
+
+                const trNew = document.createElement('tr');
+                trNew.innerHTML = `<td>${row.id}</td><td>${row.race}</td><td>${row.sex}</td><td style="background:var(--blue-l);color:var(--blue-d);font-weight:700">${row.new_score}</td>`;
+                tNew.appendChild(trNew);
+            });
+        }
+
+        async function approveHitl() {
+            const btn = event.currentTarget;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<span class="badge-dot" style="display:inline-block;margin-right:8px;background:white"></span>Saving...`;
+            btn.style.opacity = 0.8;
+            btn.disabled = true;
+
+            try {
+                const r = STATE.result;
+                const req = await fetch(`${API}/approve-hitl`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filepath: r ? r.dataset_path : STATE.filepath,
+                        status: "Approved",
+                        justification: "Human explicitly authorized the threshold adjustment mapping."
+                    })
+                });
+                const res = await req.json();
+                if (res.success) {
+                    addLog('HITL override legally approved and logged.', 's');
+                } else {
+                    console.error("Backend approval failed:", res.error);
+                }
+            } catch (e) {
+                console.error("Failed to connect to /approve-hitl:", e);
+            }
+
+            btn.innerHTML = originalText;
+            btn.style.opacity = 1;
+            btn.disabled = false;
+            nav('dashboard');
+        }
+
+        async function rejectHitl() {
+            const btn = event.currentTarget;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = `<span class="badge-dot" style="display:inline-block;margin-right:8px;background:white"></span>Rolling back...`;
+            btn.style.opacity = 0.8;
+            btn.disabled = true;
+
+            try {
+                const r = STATE.result;
+                const req = await fetch(`${API}/approve-hitl`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        filepath: r ? r.dataset_path : STATE.filepath,
+                        status: "Rejected",
+                        justification: "Human explicitly rejected the AI remediation pipeline."
+                    })
+                });
+                const res = await req.json();
+                if (res.success) {
+                    addLog('HITL override successfully rejected.', 'w');
+                }
+            } catch (e) {
+                console.error("Failed to connect:", e);
+            }
+
+            btn.innerHTML = originalText;
+            btn.style.opacity = 1;
+            btn.disabled = false;
+            nav('dashboard');
         }
 
         /* ── Report ── */
@@ -2221,7 +2345,7 @@
                         },
                         options: {
                             responsive: true, maintainAspectRatio: false,
-                            animation: { duration: 900, easing: 'easeOutQuart' },
+                            animation: staggeredAnim,
                             plugins: { legend: { labels: { color: '#5F6368', font: { family: 'Roboto Mono' } } } },
                             scales: {
                                 x: { grid: { color: '#F1F3F4' }, ticks: { color: '#5F6368', font: { family: 'Roboto Mono', size: 10 } } },
@@ -2285,7 +2409,7 @@
             typingBubble.style.cssText = 'display:flex;align-items:flex-start;gap:10px;animation:fade-in .3s ease';
             typingBubble.innerHTML = `
     <div style="width:32px;height:32px;border-radius:10px;background:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2a10 10 0 110 20A10 10 0 0112 2zm0 2a8 8 0 100 16A8 8 0 0012 4zm-1 4h2v5h-2V8zm0 7h2v2h-2v-2z"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:0 var(--r-lg) var(--r-lg) var(--r-lg);padding:14px 18px;box-shadow:var(--shadow)">
       <div style="display:flex;gap:5px;align-items:center">
@@ -2308,10 +2432,10 @@
                 const data = await res.json();
                 answer = data.answer || 'No response received.';
                 if (answer.startsWith('Error:')) {
-                    answer = 'I\'m having trouble connecting right now. Please check that the Gemini API key is active and try again.';
+                    answer = "I'm currently experiencing high traffic and couldn't process your request. Please try again in a moment.";
                 }
             } catch (e) {
-                answer = 'I\'m unable to respond right now. Please ensure the backend is running and your API key is valid.';
+                answer = "I'm currently offline or unable to reach the server. Please try again later.";
             }
 
             const typing = document.getElementById('typing-indicator');
@@ -2321,7 +2445,7 @@
             aiBubble.style.cssText = 'display:flex;align-items:flex-start;gap:10px;animation:fade-in .3s ease';
             aiBubble.innerHTML = `
     <div style="width:32px;height:32px;border-radius:10px;background:var(--blue);display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2a10 10 0 110 20A10 10 0 0112 2zm0 2a8 8 0 100 16A8 8 0 0012 4zm-1 4h2v5h-2V8zm0 7h2v2h-2v-2z"/></svg>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
     </div>
     <div style="background:var(--surface);border:1px solid var(--border);border-radius:0 var(--r-lg) var(--r-lg) var(--r-lg);padding:12px 16px;max-width:80%;box-shadow:var(--shadow)">
       <div style="font-size:13px;color:var(--t1);line-height:1.8">${answer}</div>
@@ -2339,29 +2463,49 @@
                 return;
             }
             try {
+                // Clear state
+                el.innerHTML = '<div style="color:var(--t3);padding:20px 0;font-family:var(--fm)">Generating model card...</div>';
+                MODEL_CARD_TEXT = '';
+                
                 const res = await fetch(`${API}/model-card`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ result: STATE.result }),
                 });
-                const data = await res.json();
-                if (data.error) { el.textContent = 'Error: ' + data.error; return; }
-                MODEL_CARD_TEXT = data.card;
-                const sections = data.card.split('\n##').filter(Boolean);
-                el.innerHTML = sections.map(s => {
-                    const lines = ('##' + s).split('\n');
-                    const title = lines[0].replace(/##\s*/, '');
-                    const body = lines.slice(1).join('\n').trim();
-                    return `<div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--surface2)">
-        <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:8px;display:flex;align-items:center;gap:6px">
-          <span style="width:3px;height:13px;background:var(--blue);border-radius:2px;display:inline-block"></span>
-          ${title}
-        </div>
-        <p style="font-size:14px;color:var(--t1);line-height:1.8">${body}</p>
-      </div>`;
-                }).join('');
+                
+                if (!res.ok) {
+                    const err = await res.json();
+                    el.textContent = 'Error: ' + (err.error || res.statusText);
+                    return;
+                }
+
+                // Consume stream
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                el.innerHTML = ''; // prepare for chunks
+                
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    MODEL_CARD_TEXT += decoder.decode(value, { stream: true });
+                    
+                    // Instantly render markdown-ish into HTML blocks
+                    const sections = MODEL_CARD_TEXT.split('\n##').filter(Boolean);
+                    el.innerHTML = sections.map(s => {
+                        const lines = ('##' + s).split('\n');
+                        const title = lines[0].replace(/##\s*/, '').replace(/\*/g, ''); // strip markdown bold syntax if leaked
+                        const body = lines.slice(1).join('<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                        return `<div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--surface2)">
+            <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+            <span style="width:3px;height:13px;background:var(--blue);border-radius:2px;display:inline-block"></span>
+            ${title}
+            </div>
+            <p style="font-size:14px;color:var(--t1);line-height:1.8">${body}</p>
+        </div>`;
+                    }).join('');
+                }
             } catch (e) {
-                el.textContent = 'Error connecting to backend.';
+                el.textContent = 'Error connecting to backend: ' + e;
             }
         }
 
@@ -2433,7 +2577,7 @@
                 },
                 options: {
                     responsive: true, maintainAspectRatio: false,
-                    animation: { duration: 800, easing: 'easeOutQuart' },
+                    animation: staggeredAnim,
                     plugins: { legend: { display: false }, tooltip: { callbacks: { label: c => ` DIR: ${c.raw?.toFixed(3) ?? 'N/A'}` } } },
                     scales: {
                         x: { grid: { color: '#F1F3F4' }, ticks: { color: '#5F6368', font: { family: 'Roboto Mono', size: 11 } } },
@@ -2618,6 +2762,59 @@
         </div>
     </template>
 
+
+    <!-- ── HITL Template ── -->
+    <template id="tpl-hitl">
+        <div style="display:flex;flex-direction:column;gap:24px;max-width:1100px;margin:0 auto">
+            <div class="card" style="display:flex;justify-content:space-between;align-items:center;background:var(--blue-d);color:white;border:none">
+                <div>
+                    <h2 style="font-size:18px;margin:0 0 4px 0;color:white">Action Required: Review Remediator Output</h2>
+                    <div style="font-size:13px;opacity:0.85">The AI proposed adjustments to the original dataset to resolve detected bias in the "<span id="hitl-domain">criminal_justice</span>" domain.</div>
+                </div>
+                <div style="display:flex;gap:10px">
+                    <button class="btn" style="background:transparent;border-color:white;color:white" onclick="rejectHitl()">Reject Fix</button>
+                    <button class="btn btn-blue" style="background:white;color:var(--blue-d)" onclick="approveHitl()">Approve & Finalize</button>
+                </div>
+            </div>
+
+            <div class="g2">
+                <div class="card" style="border-top:3px solid var(--red)">
+                    <div class="sec-head" style="color:var(--red-d)">Original Dataset (Biased)</div>
+                    <div style="font-size:32px;font-weight:700;margin-bottom:4px;font-family:'Google Sans Display',sans-serif"><span id="hitl-score-orig">0.584</span> <span style="font-size:12px;color:var(--red-d);font-weight:700" class="badge-red">Critical Bias</span></div>
+                    <div style="font-size:12px;color:var(--t3);margin-bottom:16px">Disparate Impact Score</div>
+                    
+                    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--r)">
+                        <table class="data-table" style="min-width:100%">
+                            <thead><tr><th>ID</th><th>Sensitive</th><th>Context</th><th>Score</th></tr></thead>
+                            <tbody id="hitl-orig-body">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="card" style="border-top:3px solid var(--green)">
+                    <div class="sec-head" style="color:var(--green-d)">Proposed Alterations (Fair)</div>
+                    <div style="font-size:32px;font-weight:700;margin-bottom:4px;font-family:'Google Sans Display',sans-serif"><span id="hitl-score-new">0.812</span> <span style="font-size:12px;color:var(--green-d);font-weight:700" class="badge-green">Passes Threshold</span></div>
+                    <div style="font-size:12px;color:var(--t3);margin-bottom:16px">Disparate Impact Score</div>
+
+                    <div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--r)">
+                        <table class="data-table" style="min-width:100%">
+                            <thead><tr><th>ID</th><th>Sensitive</th><th>Context</th><th>Score <span style="color:var(--blue)">(Modified)</span></th></tr></thead>
+                            <tbody id="hitl-new-body">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="sec-head">AI Justification</div>
+                <div id="hitl-just" style="font-size:13px;line-height:1.6;color:var(--t2)">
+                    AI Justification loading...
+                </div>
+            </div>
+        </div>
+    </template>
 
     <div class="modal-overlay" id="welcome-modal" style="display:none">
         <div class="modal-box">

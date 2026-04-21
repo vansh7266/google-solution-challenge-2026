@@ -6,7 +6,7 @@ import asyncio
 from .state import AuditState
 
 genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-2.0-flash")
+model = genai.GenerativeModel("gemini-2.5-flash-lite")
 
 
 async def agent_profiler(state: AuditState) -> AuditState:

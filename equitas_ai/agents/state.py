@@ -26,6 +26,8 @@ class AuditState(TypedDict):
     # Remediator output
     remediation_applied:      str
     iteration_count:          int
+    hitl_diff:                List[Dict[str, Any]]
+    hitl_justification:       str
 
     # Reporter output
     report_path:              str
