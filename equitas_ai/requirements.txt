@@ -12,3 +12,4 @@ python-dotenv
 fairlearn
 matplotlib
 google-cloud-aiplatform
+aiofiles

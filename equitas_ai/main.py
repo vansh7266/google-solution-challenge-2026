@@ -17,6 +17,7 @@ genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
 from fastapi import FastAPI, UploadFile, File, Query
 from fastapi.responses import StreamingResponse, FileResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from langgraph.graph import StateGraph, END
 
 from agents.state import AuditState
@@ -50,6 +51,18 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Create required directories
+Path("reports").mkdir(exist_ok=True)
+Path("audit_history/approvals").mkdir(parents=True, exist_ok=True)
+
+# Serve Frontend
+@app.get("/")
+async def read_index():
+    return FileResponse('index.html')
+
+# Mount static files
+app.mount("/reports", StaticFiles(directory="reports"), name="reports")
 
 DEMO_MODE_ENV = os.getenv("DEMO_MODE", "false").lower() == "true"
 UPLOAD_DIR = Path("uploads")
