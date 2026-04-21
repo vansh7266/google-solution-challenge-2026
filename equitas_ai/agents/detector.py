@@ -7,10 +7,16 @@ from sklearn.metrics import precision_score
 from .state import AuditState
 
 
-def _binarize(s: pd.Series) -> np.ndarray:
+def _binarize(s: pd.Series, domain: str = "general") -> np.ndarray:
     if s.dtype == object or str(s.dtype) == "category":
         enc = LabelEncoder().fit_transform(s.astype(str))
-        return (enc == enc.max()).astype(int)
+        target_val = enc.min() if domain == "criminal_justice" else enc.max()
+        return (enc == target_val).astype(int)
+    
+    # Numerical target handling
+    if domain == "criminal_justice":
+        # In COMPAS, 0 is 'no recidivism', which is the good outcome.
+        return (s == 0).astype(int)
     return (s > s.median()).astype(int)
 
 
@@ -104,7 +110,19 @@ async def agent_bias_detector(state: AuditState) -> AuditState:
         }
 
     sensitive_col = sensitive_cols[0]
-    di = _dir_score(df, sensitive_col, target_col)
+    domain = state.get("domain", "general")
+    di = _dir_score(df, sensitive_col, target_col) # Note: _dir_score needs domain too, updating it
+    y_bin = _binarize(df[target_col], domain)
+    
+    # Internal function update to avoid signature change drama
+    def _get_dir(sub_df, s_col, t_col):
+        rates = sub_df.groupby(s_col)["_y"].mean()
+        if len(rates) < 2 or rates.max() == 0: return 1.0
+        return round(float(rates.min() / rates.max()), 3)
+
+    tmp_df = df.copy()
+    tmp_df["_y"] = y_bin
+    di = _get_dir(tmp_df, sensitive_col, target_col)
 
     try:
         m = _model_metrics(df, sensitive_col, target_col)
@@ -123,9 +141,13 @@ async def agent_bias_detector(state: AuditState) -> AuditState:
     if len(sensitive_cols) >= 2:
         try:
             col2 = sensitive_cols[1]
-            y_bin = _binarize(df[target_col])
             tmp = df.copy()
-            tmp["_y"] = y_bin
+            tmp["_y"] = _binarize(df[target_col], domain)
+            
+            # Smart Binning for numerical columns (like age)
+            if pd.api.types.is_numeric_dtype(tmp[col2]) and tmp[col2].nunique() > 10:
+                tmp[col2] = pd.cut(tmp[col2], bins=[0, 25, 45, 100], labels=["<25", "25-45", "45+"])
+            
             mat = tmp.groupby([sensitive_col, col2])["_y"].mean()
             inter = {f"{k[0]}+{k[1]}": round(float(v), 3) for k, v in mat.items()}
         except Exception:
