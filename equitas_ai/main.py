@@ -297,21 +297,8 @@ async def generate_model_card(payload: dict):
 
     try:
         m = get_model("gemini-2.5-flash-lite")
-        
-        async def generate():
-            response = await run_model_async(m, prompt, stream=True)
-            for chunk in response:
-                yield chunk.text
-
-        return StreamingResponse(
-            generate(), 
-            media_type="text/plain",
-            headers={
-                "X-Accel-Buffering": "no",
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive"
-            }
-        )
+        response = await run_model_async(m, prompt)
+        return {"card": response.text.strip()}
     except Exception as e:
         return {"error": str(e)}
 

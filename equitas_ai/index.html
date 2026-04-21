@@ -2473,8 +2473,8 @@
                 return;
             }
             try {
-                // Clear state
-                el.innerHTML = '<div style="color:var(--t3);padding:20px 0;font-family:var(--fm)">Generating model card...</div>';
+                // Show loading state
+                el.innerHTML = '<div style="color:var(--t3);padding:40px 0;text-align:center;font-family:var(--fm)"><div class="shimmer" style="height:200px;border-radius:var(--r);margin-bottom:12px"></div><p>Generating Model Card with Gemini...</p></div>';
                 MODEL_CARD_TEXT = '';
                 
                 const res = await fetch(`${API}/model-card`, {
@@ -2483,42 +2483,31 @@
                     body: JSON.stringify({ result: STATE.result }),
                 });
                 
-                if (!res.ok) {
-                    const err = await res.json();
-                    el.textContent = 'Error: ' + (err.error || res.statusText);
+                const data = await res.json();
+                
+                if (data.error) {
+                    el.innerHTML = `<div style="padding:20px;color:var(--red-d);background:var(--red-l);border-radius:var(--r);font-size:13px">
+                        <strong>⚠ Error:</strong> ${data.error}
+                    </div>`;
                     return;
                 }
 
-                // Consume stream
-                const reader = res.body.getReader();
-                const decoder = new TextDecoder();
-                let firstChunk = true;
-                
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    
-                    if (firstChunk) {
-                        el.innerHTML = ''; // Clear loading state only when content arrives
-                        firstChunk = false;
-                    }
-                    MODEL_CARD_TEXT += decoder.decode(value, { stream: true });
-                    
-                    // Instantly render markdown-ish into HTML blocks
-                    const sections = MODEL_CARD_TEXT.split('\n##').filter(Boolean);
-                    el.innerHTML = sections.map(s => {
-                        const lines = ('##' + s).split('\n');
-                        const title = lines[0].replace(/##\s*/, '').replace(/\*/g, ''); // strip markdown bold syntax if leaked
-                        const body = lines.slice(1).join('<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                        return `<div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--surface2)">
+                MODEL_CARD_TEXT = data.card || '';
+
+                // Render markdown sections into styled HTML
+                const sections = MODEL_CARD_TEXT.split('\n##').filter(Boolean);
+                el.innerHTML = sections.map(s => {
+                    const lines = ('##' + s).split('\n');
+                    const title = lines[0].replace(/##\s*/, '').replace(/\*/g, '');
+                    const body = lines.slice(1).join('<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                    return `<div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--surface2)">
             <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:8px;display:flex;align-items:center;gap:6px">
             <span style="width:3px;height:13px;background:var(--blue);border-radius:2px;display:inline-block"></span>
             ${title}
             </div>
             <p style="font-size:14px;color:var(--t1);line-height:1.8">${body}</p>
         </div>`;
-                    }).join('');
-                }
+                }).join('');
             } catch (e) {
                 el.innerHTML = `<div style="padding:20px;color:var(--red-d);background:var(--red-l);border-radius:var(--r);font-size:13px">
                     <strong>⚠ Error connecting to backend:</strong> ${e.message || e}
