@@ -2218,8 +2218,7 @@
             });
         }
 
-        async function approveHitl() {
-            const btn = event.currentTarget;
+        async function approveHitl(btn) {
             const originalText = btn.innerHTML;
             btn.innerHTML = `<span class="badge-dot" style="display:inline-block;margin-right:8px;background:white"></span>Saving...`;
             btn.style.opacity = 0.8;
@@ -2252,8 +2251,7 @@
             nav('dashboard');
         }
 
-        async function rejectHitl() {
-            const btn = event.currentTarget;
+        async function rejectHitl(btn) {
             const originalText = btn.innerHTML;
             btn.innerHTML = `<span class="badge-dot" style="display:inline-block;margin-right:8px;background:white"></span>Rolling back...`;
             btn.style.opacity = 0.8;
@@ -2772,8 +2770,8 @@
                     <div style="font-size:13px;opacity:0.85">The AI proposed adjustments to the original dataset to resolve detected bias in the "<span id="hitl-domain">criminal_justice</span>" domain.</div>
                 </div>
                 <div style="display:flex;gap:10px">
-                    <button class="btn" style="background:transparent;border-color:white;color:white" onclick="rejectHitl()">Reject Fix</button>
-                    <button class="btn btn-blue" style="background:white;color:var(--blue-d)" onclick="approveHitl()">Approve & Finalize</button>
+                    <button class="btn" style="background:transparent;border-color:white;color:white" onclick="rejectHitl(this)">Reject Fix</button>
+                    <button class="btn btn-blue" style="background:white;color:var(--blue-d)" onclick="approveHitl(this)">Approve & Finalize</button>
                 </div>
             </div>
 

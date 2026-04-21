@@ -121,7 +121,7 @@ Upload Dataset
 
 | Layer | Technology |
 |---|---|
-| AI Agents | Google Gemini 1.5 Flash |
+| AI Agents | Google Gemini 2.5 Flash Lite |
 | Agentic Framework | LangGraph (StateGraph) |
 | Fairness Metrics | AIF360, Fairlearn, SHAP |
 | Backend | FastAPI, Python 3.11, asyncio |
