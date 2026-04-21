@@ -111,18 +111,12 @@ async def agent_bias_detector(state: AuditState) -> AuditState:
 
     sensitive_col = sensitive_cols[0]
     domain = state.get("domain", "general")
-    di = _dir_score(df, sensitive_col, target_col) # Note: _dir_score needs domain too, updating it
     y_bin = _binarize(df[target_col], domain)
-    
-    # Internal function update to avoid signature change drama
-    def _get_dir(sub_df, s_col, t_col):
-        rates = sub_df.groupby(s_col)["_y"].mean()
-        if len(rates) < 2 or rates.max() == 0: return 1.0
-        return round(float(rates.min() / rates.max()), 3)
 
     tmp_df = df.copy()
     tmp_df["_y"] = y_bin
-    di = _get_dir(tmp_df, sensitive_col, target_col)
+    rates = tmp_df.groupby(sensitive_col)["_y"].mean()
+    di = round(float(rates.min() / rates.max()), 3) if len(rates) >= 2 and rates.max() > 0 else 1.0
 
     try:
         m = _model_metrics(df, sensitive_col, target_col)

@@ -133,6 +133,8 @@ async def run_audit_stream(filepath: str, demo: bool) -> AsyncGenerator[str, Non
         "remediation_applied": "None",
         "iteration_count": 0,
         "report_path": "",
+        "hitl_diff": [],
+        "hitl_justification": "",
     }
 
     accumulated = dict(initial)
@@ -321,6 +323,7 @@ async def what_if_simulator(payload: dict):
     sensitive_col  = payload.get("sensitive_col", "")
     target_col     = payload.get("target_col", "")
     group_ratios   = payload.get("group_ratios", {})
+    domain         = payload.get("domain", "general")
 
     if not dataset_path or not sensitive_col:
         return {"error": "Missing parameters"}
@@ -333,7 +336,7 @@ async def what_if_simulator(payload: dict):
         target = target_col if target_col in df.columns else df.columns[-1]
         groups = df[sensitive_col].unique().tolist()
 
-        from agents.detector import _binarize, _dir_score
+        from agents.detector import _binarize
         results = {}
 
         for pct in range(10, 100, 10):
@@ -353,8 +356,12 @@ async def what_if_simulator(payload: dict):
                 df_unpriv.sample(n=n_unpriv, replace=True, random_state=42)
             ])
             try:
-                score = _dir_score(sim_df, sensitive_col, target)
-                results[pct] = round(score, 3)
+                y_bin = _binarize(sim_df[target], domain)
+                tmp = sim_df.copy()
+                tmp["_y"] = y_bin
+                rates = tmp.groupby(sensitive_col)["_y"].mean()
+                score = round(float(rates.min() / rates.max()), 3) if len(rates) >= 2 and rates.max() > 0 else 1.0
+                results[pct] = score
             except Exception:
                 results[pct] = None
 

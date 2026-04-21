@@ -2218,12 +2218,14 @@
             tNew.innerHTML = '';
 
             r.hitl_diff.forEach(row => {
+                const g1 = row.group || 'N/A';
+                const g2 = row.group2 || 'N/A';
                 const trOrig = document.createElement('tr');
-                trOrig.innerHTML = `<td>${row.id}</td><td style="color:var(--red-d);font-weight:700">${row.race}</td><td>${row.sex}</td><td>${row.original_score}</td>`;
+                trOrig.innerHTML = `<td>${row.id}</td><td style="color:var(--red-d);font-weight:700">${g1}</td><td>${g2}</td><td>${row.original_score}</td>`;
                 tOrig.appendChild(trOrig);
 
                 const trNew = document.createElement('tr');
-                trNew.innerHTML = `<td>${row.id}</td><td>${row.race}</td><td>${row.sex}</td><td style="background:var(--blue-l);color:var(--blue-d);font-weight:700">${row.new_score}</td>`;
+                trNew.innerHTML = `<td>${row.id}</td><td>${g1}</td><td>${g2}</td><td style="background:var(--blue-l);color:var(--blue-d);font-weight:700">${row.new_score}</td>`;
                 tNew.appendChild(trNew);
             });
         }
@@ -2518,7 +2520,9 @@
                     }).join('');
                 }
             } catch (e) {
-                el.textContent = 'Error connecting to backend: ' + e;
+                el.innerHTML = `<div style="padding:20px;color:var(--red-d);background:var(--red-l);border-radius:var(--r);font-size:13px">
+                    <strong>⚠ Error connecting to backend:</strong> ${e.message || e}
+                </div>`;
             }
         }
 
@@ -2535,7 +2539,7 @@
 
         async function initWhatIf() {
             const r = STATE.result;
-            if (!r || !r.dataset_path || r.dataset_path === 'demo') {
+            if (!r || !r.dataset_path || STATE.isDemo) {
                 document.getElementById('app').innerHTML = '<div style="padding:60px;text-align:center;color:var(--t3)">Run a real audit first (not demo mode) to use the simulator.</div>';
                 return;
             }

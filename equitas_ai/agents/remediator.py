@@ -90,11 +90,14 @@ async def agent_remediator(state: AuditState) -> AuditState:
         else:
             new_val = orig_val
 
-        # Bug 2 Fix: Flexible demographic keys (gender fallback)
+        # Dynamic demographic keys based on actual dataset columns
+        second_col = sens_cols[1] if len(sens_cols) > 1 else None
         diffs.append({
             "id":             int(idx),
-            "race":           str(row[sens_col]),
-            "sex":            str(row.get("sex", row.get("gender", "N/A"))),
+            "group":          str(row[sens_col]),
+            "group_label":    sens_col,
+            "group2":         str(row[second_col]) if second_col and second_col in row.index else "N/A",
+            "group2_label":   second_col if second_col else "",
             "original_score": str(orig_val),
             "new_score":      str(new_val)
         })
