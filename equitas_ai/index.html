@@ -2480,11 +2480,16 @@
                 // Consume stream
                 const reader = res.body.getReader();
                 const decoder = new TextDecoder();
-                el.innerHTML = ''; // prepare for chunks
+                let firstChunk = true;
                 
                 while (true) {
                     const { done, value } = await reader.read();
                     if (done) break;
+                    
+                    if (firstChunk) {
+                        el.innerHTML = ''; // Clear loading state only when content arrives
+                        firstChunk = false;
+                    }
                     MODEL_CARD_TEXT += decoder.decode(value, { stream: true });
                     
                     // Instantly render markdown-ish into HTML blocks

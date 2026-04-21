@@ -302,7 +302,15 @@ async def generate_model_card(payload: dict):
             for chunk in response:
                 yield chunk.text
 
-        return StreamingResponse(generate(), media_type="text/plain")
+        return StreamingResponse(
+            generate(), 
+            media_type="text/plain",
+            headers={
+                "X-Accel-Buffering": "no",
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive"
+            }
+        )
     except Exception as e:
         return {"error": str(e)}
 
