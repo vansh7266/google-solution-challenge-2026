@@ -1,12 +1,11 @@
 import pandas as pd
-import google.generativeai as genai
 import json
 import os
 import asyncio
 from .state import AuditState
+from .ai_config import get_model, run_model_async
 
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-2.5-flash-lite")
+model = get_model("gemini-2.5-flash-lite")
 
 
 async def agent_profiler(state: AuditState) -> AuditState:
@@ -33,8 +32,7 @@ async def agent_profiler(state: AuditState) -> AuditState:
         f'{{ "domain": "hiring", "sensitive_cols": ["age","gender"], "domain_context": "..." }}'
     )
 
-    loop = asyncio.get_running_loop()
-    response = await loop.run_in_executor(None, model.generate_content, prompt)
+    response = await run_model_async(model, prompt)
 
     try:
         raw = response.text.replace("```json", "").replace("```", "").strip()

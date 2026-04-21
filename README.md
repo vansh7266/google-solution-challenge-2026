@@ -157,30 +157,39 @@ equitas_ai/
 
 ---
 
-## Setup & Run
+# 🚀 Setup & Run
 
+### A. Local Setup (AI Studio)
 ```bash
-# 1. Clone
+# 1. Clone & Enter
 git clone https://github.com/vansh7266/google-solution-challenge-2026
 cd google-solution-challenge-2026/equitas_ai
 
-# 2. Create virtual environment
-python3 -m venv venv
-source venv/bin/activate
-
-# 3. Install dependencies
+# 2. Environment
+python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-
-# 4. Add API key
 echo "GEMINI_API_KEY=your_key_here" > .env
 
-# 5. Start backend
+# 3. Launch
 uvicorn main:app --reload --port 8000
-
-# 6. Open frontend
-open index.html   # macOS
-# or open index.html in Chrome directly
+open index.html
 ```
+
+### B. Cloud Deployment (Vertex AI)
+Equitas AI is enterprise-ready and optimized for **Google Cloud Run**. It utilizes **Vertex AI** to leverage high-throughput scaling and GCP credits.
+
+```bash
+# 1. Configure GCP
+gcloud auth login
+gcloud config set project poetic-standard-494013-j6
+
+# 2. Enable Vertex & Cloud Run APIs
+gcloud services enable run.googleapis.com aiplatform.googleapis.com
+
+# 3. Deploy (Keyless IAM)
+gcloud run deploy equitas-ai --source . --region us-central1 --allow-unauthenticated
+```
+*Note: The system automatically detects the Cloud environment and switches to Vertex AI (IAM-based) from AI Studio (Key-based) using the built-in `ai_config.py` utility.*
 
 ---
 

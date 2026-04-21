@@ -25,6 +25,7 @@ from agents.detector import agent_bias_detector
 from agents.explainer import agent_explainer
 from agents.remediator import agent_remediator
 from agents.reporter import agent_reporter
+from agents.ai_config import get_model, run_model_async
 
 
 class SafeEncoder(json.JSONEncoder):
@@ -246,10 +247,8 @@ async def ask_gemini(payload: dict):
         f"Answer this question from the user in 2-3 clear sentences using the audit data above:\n{question}"
     )
     try:
-        import google.generativeai as genai
-        m = genai.GenerativeModel("gemini-2.5-flash-lite")
-        loop = asyncio.get_running_loop()
-        response = await loop.run_in_executor(None, m.generate_content, prompt)
+        m = get_model("gemini-2.5-flash-lite")
+        response = await run_model_async(m, prompt)
         return {"answer": response.text.strip()}
     except Exception as e:
         return {"answer": f"Error: {str(e)}"}
@@ -283,12 +282,10 @@ async def generate_model_card(payload: dict):
     )
 
     try:
-        import google.generativeai as genai
-        from fastapi.responses import StreamingResponse
-        m = genai.GenerativeModel("gemini-2.5-flash-lite")
+        m = get_model("gemini-2.5-flash-lite")
         
         async def generate():
-            response = await asyncio.to_thread(m.generate_content, prompt, stream=True)
+            response = await run_model_async(m, prompt, stream=True)
             for chunk in response:
                 yield chunk.text
 

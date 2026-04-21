@@ -3,11 +3,10 @@ import json
 import asyncio
 import os
 from pathlib import Path
-import google.generativeai as genai
 from .state import AuditState
+from .ai_config import get_model, run_model_async
 
-genai.configure(api_key=os.environ.get("GEMINI_API_KEY"))
-model = genai.GenerativeModel("gemini-2.5-flash-lite")
+model = get_model("gemini-2.5-flash-lite")
 
 
 def _get_similar_audits(domain: str, bias_score: float) -> list:
@@ -61,8 +60,7 @@ async def agent_remediator(state: AuditState) -> AuditState:
         f"Recommend ONE debiasing strategy (Reweighing, Resampling, or Threshold Adjustment) "
         f"and explain why in exactly 2 sentences. Reference past cases if available."
     )
-    loop = asyncio.get_running_loop()
-    response = await loop.run_in_executor(None, model.generate_content, prompt)
+    response = await run_model_async(model, prompt)
     strategy = response.text.strip()
 
     improved_score = round(min(di_score + 0.25, 0.95), 3) if di_score < 0.8 else di_score
@@ -100,6 +98,10 @@ async def agent_remediator(state: AuditState) -> AuditState:
             "original_score": str(orig_val),
             "new_score":      str(new_val)
         })
+        # Ensure the column can hold string values to avoid pandas warnings
+        if df[target_col].dtype != object:
+            df[target_col] = df[target_col].astype(object)
+            
         df.at[idx, target_col] = new_val
 
     # Save the remediated data locally
