@@ -2494,20 +2494,32 @@
 
                 MODEL_CARD_TEXT = data.card || '';
 
-                // Render markdown sections into styled HTML
-                const sections = MODEL_CARD_TEXT.split('\n##').filter(Boolean);
-                el.innerHTML = sections.map(s => {
-                    const lines = ('##' + s).split('\n');
-                    const title = lines[0].replace(/##\s*/, '').replace(/\*/g, '');
-                    const body = lines.slice(1).join('<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
-                    return `<div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--surface2)">
-            <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:8px;display:flex;align-items:center;gap:6px">
-            <span style="width:3px;height:13px;background:var(--blue);border-radius:2px;display:inline-block"></span>
-            ${title}
-            </div>
-            <p style="font-size:14px;color:var(--t1);line-height:1.8">${body}</p>
-        </div>`;
-                }).join('');
+                // Robust markdown renderer — handles all ## positions
+                if (!MODEL_CARD_TEXT.trim()) {
+                    el.innerHTML = '<div style="color:var(--t3);padding:20px">No content generated.</div>';
+                    return;
+                }
+                
+                // Split by ## headers (handles start-of-string and mid-string)
+                const parts = MODEL_CARD_TEXT.split(/(?:^|\n)##\s+/).filter(s => s.trim());
+                
+                if (parts.length === 0) {
+                    // No ## headers found — render as plain text
+                    el.innerHTML = `<div style="font-size:14px;color:var(--t1);line-height:1.8;white-space:pre-wrap">${MODEL_CARD_TEXT}</div>`;
+                } else {
+                    el.innerHTML = parts.map(section => {
+                        const lines = section.split('\n');
+                        const title = lines[0].replace(/\*+/g, '').trim();
+                        const body = lines.slice(1).join('<br>').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').trim();
+                        return `<div style="margin-bottom:20px;padding-bottom:20px;border-bottom:1px solid var(--surface2)">
+                <div style="font-size:13px;font-weight:700;color:var(--blue);margin-bottom:8px;display:flex;align-items:center;gap:6px">
+                <span style="width:3px;height:13px;background:var(--blue);border-radius:2px;display:inline-block"></span>
+                ${title}
+                </div>
+                <p style="font-size:14px;color:var(--t1);line-height:1.8">${body || '<em style="color:var(--t3)">No details provided.</em>'}</p>
+            </div>`;
+                    }).join('');
+                }
             } catch (e) {
                 el.innerHTML = `<div style="padding:20px;color:var(--red-d);background:var(--red-l);border-radius:var(--r);font-size:13px">
                     <strong>⚠ Error connecting to backend:</strong> ${e.message || e}
